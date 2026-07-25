@@ -1,4 +1,4 @@
-name: Build Nexus Admin APK
+name: Build APK
 
 on:
   push:
@@ -8,107 +8,40 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          
+      - uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
+          
+      - name: Fix imports
+        run: |
+          find app/src/main/java -name "*.kt" -type f -exec sed -i 's/HorizontalDivider/Divider/g' {} \;
+          find app/src/main/java -name "*.kt" -type f -exec sed -i 's/import androidx.compose.material3.HorizontalDivider/import androidx.compose.material3.Divider/g' {} \;
+          
+      - name: Setup Gradle
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip -q gradle-8.5-bin.zip
+          export PATH=$PWD/gradle-8.5/bin:$PATH
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+          
+      - name: Build
+        run: ./gradlew assembleDebug --no-daemon
         
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        api-level: 34
-        build-tools: 34.0.0
-        
-    - name: Fix ALL Kotlin compatibility issues
-      run: |
-        echo "========================================="
-        echo "  CORRIGIENDO ERRORES DE COMPILACIÓN"
-        echo "========================================="
-        
-        # 1. Reemplazar HorizontalDivider -> Divider en todos los archivos
-        echo "1. Reemplazando HorizontalDivider por Divider..."
-        find app/src/main/java -name "*.kt" -type f -exec sed -i 's/HorizontalDivider/Divider/g' {} \;
-        find app/src/main/java -name "*.kt" -type f -exec sed -i 's/import androidx.compose.material3.HorizontalDivider/import androidx.compose.material3.Divider/g' {} \;
-        echo "   ✅ Hecho"
-        
-        # 2. Eliminar imports duplicados o incorrectos
-        echo "2. Limpiando imports..."
-        find app/src/main/java -name "*.kt" -type f -exec sed -i '/^import androidx.compose.material3.HorizontalDivider$/d' {} \;
-        echo "   ✅ Hecho"
-        
-        # 3. Asegurar que todos los archivos tengan los imports básicos
-        echo "3. Agregando imports esenciales..."
-        for file in $(find app/src/main/java -name "*.kt" -type f); do
-          # Verificar si ya tiene package declaration
-          if grep -q "^package" "$file"; then
-            # Lista de imports esenciales
-            IMPORTS=(
-              "import androidx.compose.material3.Divider"
-              "import androidx.compose.foundation.layout.*"
-              "import androidx.compose.ui.Alignment"
-              "import androidx.compose.ui.Modifier"
-              "import androidx.compose.ui.unit.dp"
-              "import androidx.compose.foundation.clickable"
-              "import androidx.compose.foundation.background"
-            )
-            
-            for import_line in "${IMPORTS[@]}"; do
-              import_check=$(echo "$import_line" | sed 's/\.\*//' | sed 's/import //')
-              if ! grep -q "$import_check" "$file"; then
-                sed -i "/^package/a $import_line" "$file"
-              fi
-            done
-          fi
-        done
-        echo "   ✅ Hecho"
-        
-        # 4. Corregir RestockScreen específicamente
-        echo "4. Corrigiendo RestockScreen..."
-        RESTOK_FILE="app/src/main/java/com/nexus/admin/ui/screens/RestockScreen.kt"
-        if [ -f "$RESTOK_FILE" ]; then
-          # Reemplazar .clickable { por .clickable(onClick = {
-          sed -i 's/\.clickable\s*{/.clickable(onClick = {/g' "$RESTOK_FILE"
-          echo "   ✅ RestockScreen corregido"
-        fi
-        
-        # 5. Verificar correcciones
-        echo "5. Verificando correcciones..."
-        REMAINING_ERRORS=$(grep -rn "HorizontalDivider" app/src/main/java/ 2>/dev/null | wc -l)
-        echo "   HorizontalDivider restantes: $REMAINING_ERRORS"
-        
-        echo "========================================="
-        echo "  CORRECCIONES COMPLETADAS"
-        echo "========================================="
-        
-    - name: Install Gradle
-      run: |
-        echo "Instalando Gradle 8.5..."
-        wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
-        unzip -q gradle-8.5-bin.zip
-        export GRADLE_HOME=$PWD/gradle-8.5
-        export PATH=$GRADLE_HOME/bin:$PATH
-        echo "GRADLE_HOME=$GRADLE_HOME" >> $GITHUB_ENV
-        echo "$GRADLE_HOME/bin" >> $GITHUB_PATH
-        gradle --version
-        
-    - name: Create local.properties
-      run: |
-        echo "sdk.dir=$ANDROID_HOME" > local.properties
-        
-    - name: Setup Gradle Wrapper
-      run: |
-        mkdir -p gradle/wrapper
-        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
-        distributionBase=GRADLE_USER_HOME
-        distributionPath=wrapper/dists
-        distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
-        networkTimeout=10000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: APK
+          path: app/build/outputs/apk/debug/app-debug.apk        networkTimeout=10000
         validateDistributionUrl=true
         zipStoreBase=GRADLE_USER_HOME
         zipStorePath=wrapper/dists
