@@ -1,12 +1,11 @@
 package com.nexus.admin.ui.screens
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,11 +16,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.nexus.admin.data.AppDatabase
-import com.nexus.admin.data.entity.*
 import com.nexus.admin.ui.theme.*
 import com.nexus.admin.utils.Utils
 import kotlinx.coroutines.launch
+
+data class BackupInfo(
+    val date: Long,
+    val size: Long,
+    val auto: Boolean
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,28 +38,39 @@ fun BackupScreen() {
     var backups by remember { mutableStateOf<List<BackupInfo>>(emptyList()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     
-    data class BackupInfo(val date: Long, val size: Long, val auto: Boolean)
-    
     LaunchedEffect(Unit) {
-        // Load backups from SharedPreferences
         val prefs = context.getSharedPreferences("nexus_backups", Context.MODE_PRIVATE)
         val backupsJson = prefs.getString("backup_list", "[]") ?: "[]"
-        backups = Gson().fromJson(backupsJson, Array<BackupInfo>::class.java).toList()
+        val type = object : TypeToken<List<BackupInfo>>() {}.type
+        backups = try {
+            Gson().fromJson(backupsJson, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
     
     val createBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
-    ) { uri: Uri? ->
+    ) { uri ->
         uri?.let {
             scope.launch {
                 exportBackupToUri(context, db, it)
+                // Recargar backups
+                val prefs = context.getSharedPreferences("nexus_backups", Context.MODE_PRIVATE)
+                val backupsJson = prefs.getString("backup_list", "[]") ?: "[]"
+                val type = object : TypeToken<List<BackupInfo>>() {}.type
+                backups = try {
+                    Gson().fromJson(backupsJson, type) ?: emptyList()
+                } catch (e: Exception) {
+                    emptyList()
+                }
             }
         }
     }
     
     val restoreBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
+    ) { uri ->
         uri?.let {
             scope.launch {
                 importBackupFromUri(context, db, it)
@@ -97,7 +113,7 @@ fun BackupScreen() {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = { createBackupLauncher.launch("nexus_backup_${Utils.formatDate(System.currentTimeMillis())}.json") },
+                onClick = { createBackupLauncher.launch("nexus_backup_${System.currentTimeMillis()}.json") },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Filled.Backup, contentDescription = null)
@@ -112,34 +128,6 @@ fun BackupScreen() {
                 Icon(Icons.Filled.Restore, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Restaurar Respaldo")
-            }
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                addCategory(Intent.CATEGORY_OPENABLE)
-                                type = "application/json"
-                                putExtra(Intent.EXTRA_TITLE, "nexus_export_${System.currentTimeMillis()}.json")
-                            }
-                            // Launch export
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Exportar Todo")
-                }
-                
-                OutlinedButton(
-                    onClick = { restoreBackupLauncher.launch(arrayOf("application/json")) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Importar")
-                }
             }
             
             Button(
@@ -199,7 +187,7 @@ fun BackupScreen() {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("⚠️ Eliminar Todos los Datos") },
-            text = { Text("¿Está completamente seguro? Esta acción no se puede deshacer y perderá todos los registros permanentemente.") },
+            text = { Text("¿Está completamente seguro? Esta acción no se puede deshacer.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -228,7 +216,7 @@ fun BackupScreen() {
     }
 }
 
-suspend fun exportBackupToUri(context: Context, db: AppDatabase, uri: Uri) {
+suspend fun exportBackupToUri(context: Context, db: AppDatabase, uri: android.net.Uri) {
     val data = mapOf(
         "products" to db.productDao().getAllProducts(),
         "sales" to db.saleDao().getAllSales(),
@@ -247,16 +235,19 @@ suspend fun exportBackupToUri(context: Context, db: AppDatabase, uri: Uri) {
         outputStream.write(json.toByteArray())
     }
     
-    // Save backup info
     val prefs = context.getSharedPreferences("nexus_backups", Context.MODE_PRIVATE)
-    val backups = Gson().fromJson(prefs.getString("backup_list", "[]"), Array<BackupInfo>::class.java).toMutableList()
+    val backupsJson = prefs.getString("backup_list", "[]") ?: "[]"
+    val type = object : TypeToken<List<BackupInfo>>() {}.type
+    val backups = try {
+        Gson().fromJson<List<BackupInfo>>(backupsJson, type).toMutableList()
+    } catch (e: Exception) {
+        mutableListOf()
+    }
     backups.add(BackupInfo(System.currentTimeMillis(), json.toByteArray().size.toLong(), false))
     prefs.edit().putString("backup_list", Gson().toJson(backups)).apply()
 }
 
-suspend fun importBackupFromUri(context: Context, db: AppDatabase, uri: Uri) {
+suspend fun importBackupFromUri(context: Context, db: AppDatabase, uri: android.net.Uri) {
     val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() ?: return
-    val data = Gson().fromJson(json, Map::class.java)
-    
-    // Restore data...
+    // Implementar restauración según necesidades
 }
