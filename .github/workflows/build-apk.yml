@@ -25,26 +25,26 @@ jobs:
         api-level: 34
         build-tools: 34.0.0
         
-    - name: Cache Gradle packages
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-          
-    - name: Setup Gradle Wrapper
+    - name: Install Gradle
       run: |
-        echo "Configurando Gradle Wrapper..."
+        echo "Instalando Gradle 8.5..."
+        wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+        unzip -q gradle-8.5-bin.zip
+        export GRADLE_HOME=$PWD/gradle-8.5
+        export PATH=$GRADLE_HOME/bin:$PATH
+        echo "GRADLE_HOME=$GRADLE_HOME" >> $GITHUB_ENV
+        echo "$GRADLE_HOME/bin" >> $GITHUB_PATH
+        gradle --version
         
-        # Crear directorio gradle/wrapper si no existe
+    - name: Create local.properties
+      run: |
+        echo "sdk.dir=$ANDROID_HOME" > local.properties
+        echo "✅ local.properties creado"
+        
+    - name: Create gradle-wrapper.properties
+      run: |
         mkdir -p gradle/wrapper
-        
-        # Crear gradle-wrapper.properties si no existe
-        if [ ! -f "gradle/wrapper/gradle-wrapper.properties" ]; then
-          cat > gradle/wrapper/gradle-wrapper.properties << 'PROPEOF'
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
         distributionBase=GRADLE_USER_HOME
         distributionPath=wrapper/dists
         distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
@@ -52,200 +52,72 @@ jobs:
         validateDistributionUrl=true
         zipStoreBase=GRADLE_USER_HOME
         zipStorePath=wrapper/dists
-        PROPEOF
-          echo "✅ gradle-wrapper.properties creado"
-        fi
+        EOF
+        echo "✅ gradle-wrapper.properties creado"
         
-        # Descargar gradle-wrapper.jar
-        echo "Descargando gradle-wrapper.jar..."
-        curl -L -o gradle/wrapper/gradle-wrapper.jar \
-          https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar
-        
-        # Verificar descarga
-        if [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-          FILE_SIZE=$(stat -c%s "gradle/wrapper/gradle-wrapper.jar" 2>/dev/null || echo "0")
-          echo "✅ gradle-wrapper.jar descargado (${FILE_SIZE} bytes)"
-        else
-          echo "❌ Error descargando gradle-wrapper.jar"
-          exit 1
-        fi
-        
-        # Crear gradlew si no existe
-        if [ ! -f "gradlew" ]; then
-          cat > gradlew << 'GRADLEWEOF'
-        #!/bin/sh
-        
-        ##############################################################################
-        ##
-        ##  Gradle start up script for UN*X
-        ##
-        ##############################################################################
-        
-        # Attempt to set APP_HOME
-        
-        # Resolve links: $0 may be a link
-        app_path=$0
-        
-        # Need this for daisy-chained symlinks.
-        while
-            APP_HOME=${app_path%"${app_path##*/}"}  # leaves a trailing /; empty if no leading path
-            [ -h "$app_path" ]
-        do
-            ls=$( ls -ld -- "$app_path" )
-            link=${ls#*' -> '}
-            case $link in             #(
-              /*)   app_path=$link ;; #(
-              *)    app_path=$APP_HOME$link ;;
-            esac
-        done
-        
-        # This is normally unused
-        # shellcheck disable=SC2034
-        APP_BASE_NAME=${0##*/}
-        # Discard cd standard output in case $CDPATH is set (https://github.com/gradle/gradle/issues/25036)
-        APP_HOME=$( cd "${APP_HOME:-./}" > /dev/null && pwd -P ) || exit
-        
-        # Use the maximum available, or set MAX_FD != -1 to use that value.
-        MAX_FD=maximum
-        
-        warn () {
-            echo "$*"
-        } >&2
-        
-        die () {
-            echo
-            echo "$*"
-            echo
-            exit 1
-        } >&2
-        
-        # OS specific support (must be 'true' or 'false').
-        cygwin=false
-        msys=false
-        darwin=false
-        nonstop=false
-        case "$( uname )" in                #(
-          CYGWIN* )         cygwin=true  ;; #(
-          Darwin* )         darwin=true  ;; #(
-          MSYS* | MINGW* )  msys=true    ;; #(
-          NonStop* )        nonstop=true ;;
-        esac
-        
-        CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
-        
-        
-        # Determine the Java command to use to start the JVM.
-        if [ -n "$JAVA_HOME" ] ; then
-            if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
-                # IBM's JDK on AIX uses strange locations for the executables
-                JAVACMD=$JAVA_HOME/jre/sh/java
-            else
-                JAVACMD=$JAVA_HOME/bin/java
-            fi
-            if [ ! -x "$JAVACMD" ] ; then
-                die "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME
-        
-        Please set the JAVA_HOME variable in your environment to match the
-        location of your Java installation."
-            fi
-        else
-            JAVACMD=java
-            if ! command -v java >/dev/null 2>&1
-            then
-                die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
-        
-        Please set the JAVA_HOME variable in your environment to match the
-        location of your Java installation."
-            fi
-        fi
-        
-        # Increase the maximum file descriptors if we can.
-        if ! "$cygwin" && ! "$darwin" && ! "$nonstop" ; then
-            case $MAX_FD in #(
-              max*)
-                # In POSIX sh, ulimit -H is undefined. That's why the result is checked to see if it worked.
-                # shellcheck disable=SC2039,SC3045
-                MAX_FD=$( ulimit -H -n ) ||
-                    warn "Could not query maximum file descriptor limit"
-              ;;
-            esac
-            case $MAX_FD in  #(
-              '' | soft) :;; #(
-              *)
-                # In POSIX sh, ulimit -n is undefined. That's why the result is checked to see if it worked.
-                # shellcheck disable=SC2039,SC3045
-                ulimit -n "$MAX_FD" ||
-                    warn "Could not set maximum file descriptor limit to $MAX_FD"
-              ;;
-            esac
-        fi
-        
-        # Collect all arguments for the java command, stacking://the://JVM://arguments://and://the://main://class
-        # shellcheck disable=SC2086
-        exec "$JAVACMD" \
-          $DEFAULT_JVM_OPTS \
-          $JAVA_OPTS \
-          $GRADLE_OPTS \
-          "-Dorg.gradle.appname=$APP_BASE_NAME" \
-          -classpath "$CLASSPATH" \
-          org.gradle.wrapper.GradleWrapperMain \
-          "$@"
-        GRADLEWEOF
-        
-          echo "✅ gradlew creado"
-        fi
-        
-        # Dar permisos de ejecución
-        chmod +x gradlew
-        echo "✅ Permisos de ejecución otorgados"
-        
-        # Verificar instalación
-        echo "Verificando instalación..."
+    - name: Generate Gradle Wrapper
+      run: |
+        gradle wrapper --gradle-version 8.5
+        echo "✅ Gradle Wrapper generado"
         ls -la gradlew
         ls -la gradle/wrapper/
-        echo "✅ Gradle Wrapper configurado correctamente"
-      
-    - name: Verify Gradle Installation
+        
+    - name: Make gradlew executable
       run: |
-        echo "Verificando Gradle..."
-        if [ -f "gradlew" ] && [ -x "gradlew" ]; then
-          echo "✅ gradlew existe y es ejecutable"
-        else
-          echo "❌ gradlew no existe o no es ejecutable"
-          exit 1
-        fi
+        chmod +x gradlew
+        echo "✅ gradlew es ejecutable"
         
-        if [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-          echo "✅ gradle-wrapper.jar existe"
-        else
-          echo "❌ gradle-wrapper.jar no existe"
-          exit 1
-        fi
+    - name: Verify setup
+      run: |
+        echo "=== Verificando configuración ==="
+        echo "Java version:"
+        java -version
+        echo ""
+        echo "Gradle version:"
+        ./gradlew --version
+        echo ""
+        echo "Android SDK:"
+        echo $ANDROID_HOME
+        echo ""
+        echo "Archivos del proyecto:"
+        ls -la
+        echo ""
+        echo "Gradle wrapper:"
+        ls -la gradle/wrapper/
         
-        if [ -f "gradle/wrapper/gradle-wrapper.properties" ]; then
-          echo "✅ gradle-wrapper.properties existe"
-          cat gradle/wrapper/gradle-wrapper.properties
-        else
-          echo "❌ gradle-wrapper.properties no existe"
-          exit 1
-        fi
-      
     - name: Build Debug APK
       run: |
-        echo "Iniciando compilación del APK Debug..."
-        ./gradlew assembleDebug --stacktrace --no-daemon
-        echo "✅ Compilación completada"
-      
+        echo "=== Compilando APK Debug ==="
+        ./gradlew assembleDebug --stacktrace --no-daemon --warning-mode all
+        
+    - name: Check APK
+      run: |
+        echo "=== Verificando APK generado ==="
+        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+          APK_SIZE=$(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)
+          echo "✅ APK Debug generado exitosamente"
+          echo "📦 Tamaño: $APK_SIZE"
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+        else
+          echo "❌ No se encontró el APK Debug"
+          echo "Buscando archivos APK..."
+          find . -name "*.apk" 2>/dev/null || echo "No se encontraron APKs"
+          echo ""
+          echo "Contenido del directorio de build:"
+          find app/build -type f 2>/dev/null | head -20
+          exit 1
+        fi
+        
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: NexusAdmin-Debug-APK
+        name: NexusAdmin-APK
         path: app/build/outputs/apk/debug/app-debug.apk
         retention-days: 90
         
-    - name: Create keystore for release
+    - name: Build Release APK (opcional)
       run: |
-        echo "Creando keystore para release..."
+        echo "=== Generando keystore para release ==="
         keytool -genkey -v \
           -keystore app/nexus-admin.jks \
           -alias nexusadmin \
@@ -254,54 +126,20 @@ jobs:
           -validity 10000 \
           -storepass nexusadmin123 \
           -keypass nexusadmin123 \
-          -dname "CN=Nexus Admin, OU=Development, O=Nexus, L=Havana, ST=Havana, C=CU" \
-          -noprompt
-        echo "✅ Keystore creado"
-      
-    - name: Build Release APK
-      run: |
-        echo "Iniciando compilación del APK Release..."
+          -dname "CN=Nexus Admin, OU=Dev, O=Nexus, L=City, ST=State, C=US" \
+          -noprompt 2>/dev/null || echo "Keystore ya existe"
+          
+        echo "=== Compilando APK Release ==="
         export KEYSTORE_PASSWORD=nexusadmin123
         export KEY_ALIAS=nexusadmin
         export KEY_PASSWORD=nexusadmin123
-        ./gradlew assembleRelease --stacktrace --no-daemon
-        echo "✅ Compilación Release completada"
+        ./gradlew assembleRelease --stacktrace --no-daemon || echo "⚠️ Release build failed, pero el APK Debug está listo"
       continue-on-error: true
       
-    - name: Upload Release APK
+    - name: Upload Release APK (opcional)
       uses: actions/upload-artifact@v4
       with:
         name: NexusAdmin-Release-APK
         path: app/build/outputs/apk/release/app-release.apk
         retention-days: 90
       continue-on-error: true
-      
-    - name: Final Status
-      run: |
-        echo "========================================="
-        echo "   RESULTADO DE LA COMPILACIÓN"
-        echo "========================================="
-        
-        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
-          DEBUG_SIZE=$(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)
-          echo "✅ APK DEBUG: Generado correctamente"
-          echo "   📦 Tamaño: $DEBUG_SIZE"
-          echo "   📍 Ubicación: app/build/outputs/apk/debug/app-debug.apk"
-        else
-          echo "❌ APK DEBUG: No se pudo generar"
-        fi
-        
-        echo ""
-        
-        if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-          RELEASE_SIZE=$(du -h app/build/outputs/apk/release/app-release.apk | cut -f1)
-          echo "✅ APK RELEASE: Generado correctamente"
-          echo "   📦 Tamaño: $RELEASE_SIZE"
-          echo "   📍 Ubicación: app/build/outputs/apk/release/app-release.apk"
-        else
-          echo "⚠️  APK RELEASE: No se generó (posible error de firma)"
-        fi
-        
-        echo ""
-        echo "📥 Descarga el APK desde la pestaña 'Artifacts'"
-        echo "========================================="
