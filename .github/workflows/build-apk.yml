@@ -25,90 +25,113 @@ jobs:
         api-level: 34
         build-tools: 34.0.0
         
-    - name: Fix Kotlin imports
+    - name: Fix ALL Kotlin compatibility issues
       run: |
-        echo "=== Corrigiendo imports en archivos Kotlin ==="
+        echo "========================================="
+        echo "  CORRIGIENDO ERRORES DE COMPILACIÓN"
+        echo "========================================="
         
-        # Función para agregar import si no existe
-        add_import() {
-          local file=$1
-          local import_line=$2
-          
-          if [ -f "$file" ]; then
-            if ! grep -q "$import_line" "$file"; then
-              # Insertar después de la línea "package"
-              sed -i "/^package/a $import_line" "$file"
-              echo "  ✅ Agregado: $import_line"
-            else
-              echo "  ⏭️  Ya existe: $import_line"
-            fi
+        # 1. Reemplazar HorizontalDivider -> Divider en todos los archivos
+        echo "1. Reemplazando HorizontalDivider por Divider..."
+        find app/src/main/java -name "*.kt" -type f -exec sed -i 's/HorizontalDivider/Divider/g' {} \;
+        find app/src/main/java -name "*.kt" -type f -exec sed -i 's/import androidx.compose.material3.HorizontalDivider/import androidx.compose.material3.Divider/g' {} \;
+        echo "   ✅ Hecho"
+        
+        # 2. Eliminar imports duplicados o incorrectos
+        echo "2. Limpiando imports..."
+        find app/src/main/java -name "*.kt" -type f -exec sed -i '/^import androidx.compose.material3.HorizontalDivider$/d' {} \;
+        echo "   ✅ Hecho"
+        
+        # 3. Asegurar que todos los archivos tengan los imports básicos
+        echo "3. Agregando imports esenciales..."
+        for file in $(find app/src/main/java -name "*.kt" -type f); do
+          # Verificar si ya tiene package declaration
+          if grep -q "^package" "$file"; then
+            # Lista de imports esenciales
+            IMPORTS=(
+              "import androidx.compose.material3.Divider"
+              "import androidx.compose.foundation.layout.*"
+              "import androidx.compose.ui.Alignment"
+              "import androidx.compose.ui.Modifier"
+              "import androidx.compose.ui.unit.dp"
+              "import androidx.compose.foundation.clickable"
+              "import androidx.compose.foundation.background"
+            )
+            
+            for import_line in "${IMPORTS[@]}"; do
+              import_check=$(echo "$import_line" | sed 's/\.\*//' | sed 's/import //')
+              if ! grep -q "$import_check" "$file"; then
+                sed -i "/^package/a $import_line" "$file"
+              fi
+            done
           fi
-        }
-        
-        # Corregir todos los archivos que necesitan HorizontalDivider
-        echo ""
-        echo "Corrigiendo HorizontalDivider..."
-        for file in $(find app/src/main/java -name "*.kt" -exec grep -l "HorizontalDivider" {} \;); do
-          echo "  Procesando: $file"
-          add_import "$file" "import androidx.compose.material3.HorizontalDivider"
         done
+        echo "   ✅ Hecho"
         
-        # Corregir archivos que necesitan Alignment
-        echo ""
-        echo "Corrigiendo Alignment..."
-        for file in $(find app/src/main/java -name "*.kt" -exec grep -l "Alignment\." {} \;); do
-          echo "  Procesando: $file"
-          add_import "$file" "import androidx.compose.ui.Alignment"
-        done
+        # 4. Corregir RestockScreen específicamente
+        echo "4. Corrigiendo RestockScreen..."
+        RESTOK_FILE="app/src/main/java/com/nexus/admin/ui/screens/RestockScreen.kt"
+        if [ -f "$RESTOK_FILE" ]; then
+          # Reemplazar .clickable { por .clickable(onClick = {
+          sed -i 's/\.clickable\s*{/.clickable(onClick = {/g' "$RESTOK_FILE"
+          echo "   ✅ RestockScreen corregido"
+        fi
         
-        # Corregir archivos que necesitan dp
-        echo ""
-        echo "Corrigiendo dp..."
-        for file in $(find app/src/main/java -name "*.kt" -exec grep -l "\.dp" {} \;); do
-          echo "  Procesando: $file"
-          add_import "$file" "import androidx.compose.ui.unit.dp"
-        done
+        # 5. Verificar correcciones
+        echo "5. Verificando correcciones..."
+        REMAINING_ERRORS=$(grep -rn "HorizontalDivider" app/src/main/java/ 2>/dev/null | wc -l)
+        echo "   HorizontalDivider restantes: $REMAINING_ERRORS"
         
-        # Corregir archivos que necesitan background
-        echo ""
-        echo "Corrigiendo background..."
-        for file in $(find app/src/main/java -name "*.kt" -exec grep -l "\.background(" {} \;); do
-          echo "  Procesando: $file"
-          add_import "$file" "import androidx.compose.foundation.background"
-        done
+        echo "========================================="
+        echo "  CORRECCIONES COMPLETADAS"
+        echo "========================================="
         
-        # Corregir archivos que necesitan clickable
-        echo ""
-        echo "Corrigiendo clickable..."
-        for file in $(find app/src/main/java -name "*.kt" -exec grep -l "\.clickable" {} \;); do
-          echo "  Procesando: $file"
-          add_import "$file" "import androidx.compose.foundation.clickable"
-        done
+    - name: Install Gradle
+      run: |
+        echo "Instalando Gradle 8.5..."
+        wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+        unzip -q gradle-8.5-bin.zip
+        export GRADLE_HOME=$PWD/gradle-8.5
+        export PATH=$GRADLE_HOME/bin:$PATH
+        echo "GRADLE_HOME=$GRADLE_HOME" >> $GITHUB_ENV
+        echo "$GRADLE_HOME/bin" >> $GITHUB_PATH
+        gradle --version
         
-        # Corregir archivos que necesitan fillMaxSize
-        echo ""
-        echo "Corrigiendo fillMaxSize/width/height..."
-        for file in $(find app/src/main/java -name "*.kt" -exec grep -l "Modifier\.\(fillMaxSize\|width\|height\|padding\|size\)" {} \;); do
-          echo "  Procesando: $file"
-          add_import "$file" "import androidx.compose.foundation.layout.*"
-        done
+    - name: Create local.properties
+      run: |
+        echo "sdk.dir=$ANDROID_HOME" > local.properties
         
-        # Corregir archivos que necesitan Icons
-        echo ""
-        echo "Corrigiendo Icons..."
-        for file in $(find app/src/main/java -name "*.kt" -exec grep -l "Icons\." {} \;); do
-          echo "  Procesando: $file"
-          add_import "$file" "import androidx.compose.material.icons.Icons"
-          add_import "$file" "import androidx.compose.material.icons.filled.*"
-        done
+    - name: Setup Gradle Wrapper
+      run: |
+        mkdir -p gradle/wrapper
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+        distributionBase=GRADLE_USER_HOME
+        distributionPath=wrapper/dists
+        distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+        networkTimeout=10000
+        validateDistributionUrl=true
+        zipStoreBase=GRADLE_USER_HOME
+        zipStorePath=wrapper/dists
+        EOF
+        gradle wrapper --gradle-version 8.5
+        chmod +x gradlew
         
-        # Corregir archivos que necesitan MaterialTheme
-        echo ""
-        echo "Corrigiendo MaterialTheme..."
-        for file in $(find app/src/main/java -name "*.kt" -exec grep -l "MaterialTheme" {} \;); do
-          echo "  Procesando: $file"
-          add_import "$file" "import androidx.compose.material3.MaterialTheme"
-        done
+    - name: Build Debug APK
+      run: |
+        echo "=== Compilando APK Debug ==="
+        ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
+        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+          echo "=== ERRORES ENCONTRADOS ==="
+          grep -E "^e:" build.log || true
+          exit 1
+        fi
+        
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: NexusAdmin-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 90        done
         
         # Corregir archivos que necesitan Text
         echo ""
