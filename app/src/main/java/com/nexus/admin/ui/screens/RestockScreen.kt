@@ -290,7 +290,7 @@ fun RestockScreen() {
                                 supportingContent = {
                                     Text("Stock: ${product.stock} | Costo: $${Utils.formatCurrency(product.cost)}")
                                 },
-                                modifier = Modifier.clickable {
+                                modifier = Modifier {
                                     selectedProducts = selectedProducts + (product to 1)
                                     showProductPicker = false
                                 }
