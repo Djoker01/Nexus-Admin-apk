@@ -5,8 +5,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -15,7 +17,6 @@ import com.nexus.admin.data.entity.AppNotification
 import com.nexus.admin.ui.components.*
 import com.nexus.admin.ui.navigation.Screen
 import com.nexus.admin.ui.screens.*
-import com.nexus.admin.ui.theme.*
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,7 +31,6 @@ fun NexusApp() {
     var showNotifications by remember { mutableStateOf(false) }
     var notifications by remember { mutableStateOf<List<AppNotification>>(emptyList()) }
     var unreadCount by remember { mutableStateOf(0) }
-    var toastMessage by remember { mutableStateOf<ToastMessage?>(null) }
     
     LaunchedEffect(Unit) {
         db.notificationDao().getAllNotifications().collect {
@@ -60,7 +60,6 @@ fun NexusApp() {
                     actions = {
                         IconButton(onClick = {
                             scope.launch {
-                                // Refresh current screen
                                 navController.navigate(selectedScreen.route) {
                                     popUpTo(selectedScreen.route) { inclusive = true }
                                 }
@@ -109,46 +108,43 @@ fun NexusApp() {
         
         // Notification panel
         if (showNotifications) {
-            NotificationPanel(
-                notifications = notifications,
-                onNotificationClick = { notification ->
-                    scope.launch {
-                        db.notificationDao().update(notification.copy(read = true))
-                        showNotifications = false
-                        if (notification.section.isNotEmpty()) {
-                            val screen = Screen.items.find { it.route == notification.section }
-                            if (screen != null) {
-                                selectedScreen = screen
-                                navController.navigate(screen.route)
-                            }
-                        }
-                    }
-                },
-                onMarkAsRead = { notification ->
-                    scope.launch {
-                        db.notificationDao().update(notification.copy(read = true))
-                    }
-                },
-                onDelete = { notification ->
-                    scope.launch {
-                        db.notificationDao().delete(notification)
-                    }
-                },
-                onMarkAllRead = {
-                    scope.launch {
-                        db.notificationDao().markAllAsRead()
-                    }
-                },
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 60.dp, end = 16.dp)
-            )
+            ) {
+                NotificationPanel(
+                    notifications = notifications,
+                    onNotificationClick = { notification ->
+                        scope.launch {
+                            db.notificationDao().update(notification.copy(read = true))
+                            showNotifications = false
+                            if (notification.section.isNotEmpty()) {
+                                val screen = Screen.items.find { it.route == notification.section }
+                                if (screen != null) {
+                                    selectedScreen = screen
+                                    navController.navigate(screen.route)
+                                }
+                            }
+                        }
+                    },
+                    onMarkAsRead = { notification ->
+                        scope.launch {
+                            db.notificationDao().update(notification.copy(read = true))
+                        }
+                    },
+                    onDelete = { notification ->
+                        scope.launch {
+                            db.notificationDao().delete(notification)
+                        }
+                    },
+                    onMarkAllRead = {
+                        scope.launch {
+                            db.notificationDao().markAllAsRead()
+                        }
+                    }
+                )
+            }
         }
-        
-        // Toast messages
-        ToastHost(
-            toastState = remember { mutableStateOf(toastMessage) },
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
     }
 }
