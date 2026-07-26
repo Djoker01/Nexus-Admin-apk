@@ -1,6 +1,13 @@
 package com.nexus.admin.ui.components
 
-import androidx.compose.animation.*
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.nexus.admin.ui.navigation.Screen
 import com.nexus.admin.ui.theme.*
@@ -50,7 +58,7 @@ fun Sidebar(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val animatedWidth by animateDpAsState(
+    val animatedWidth: Dp by animateDpAsState(
         targetValue = if (isExpanded) 260.dp else 72.dp,
         animationSpec = tween(durationMillis = 300),
         label = "sidebar_width"
@@ -116,7 +124,7 @@ fun Sidebar(
                 }
             }
 
-            Divider()
+            HorizontalDivider()
 
             // Navigation items
             LazyColumn(
@@ -191,7 +199,7 @@ fun Sidebar(
 
             // Footer
             if (isExpanded) {
-                Divider()
+                HorizontalDivider()
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
