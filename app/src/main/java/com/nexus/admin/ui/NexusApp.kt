@@ -1,5 +1,6 @@
 package com.nexus.admin.ui
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -26,37 +27,56 @@ fun NexusApp() {
     val context = LocalContext.current
     val db = remember { AppDatabase.getDatabase(context) }
     val scope = rememberCoroutineScope()
-    
+
     var selectedScreen by remember { mutableStateOf<Screen>(Screen.Dashboard) }
     var showNotifications by remember { mutableStateOf(false) }
     var notifications by remember { mutableStateOf<List<AppNotification>>(emptyList()) }
     var unreadCount by remember { mutableStateOf(0) }
-    
+    var isSidebarExpanded by remember { mutableStateOf(true) }
+
     LaunchedEffect(Unit) {
         db.notificationDao().getAllNotifications().collect {
             notifications = it
             unreadCount = it.count { n -> !n.read }
         }
     }
-    
+
+    // Cerrar sidebar al seleccionar una pantalla en móvil
+    fun navigateToScreen(screen: Screen) {
+        selectedScreen = screen
+        navController.navigate(screen.route) {
+            popUpTo(Screen.Dashboard.route) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
+            // Sidebar
             Sidebar(
                 selectedItem = selectedScreen,
                 onItemSelected = { screen ->
-                    selectedScreen = screen
-                    navController.navigate(screen.route) {
-                        popUpTo(Screen.Dashboard.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
+                    navigateToScreen(screen)
+                },
+                isExpanded = isSidebarExpanded,
+                onToggle = { isSidebarExpanded = !isSidebarExpanded }
             )
-            
+
+            // Contenido principal
             Column(modifier = Modifier.weight(1f)) {
                 // Top bar
                 SmallTopAppBar(
                     title = { Text(selectedScreen.title) },
+                    navigationIcon = {
+                        // Botón de hamburguesa para mostrar/ocultar sidebar
+                        IconButton(onClick = { isSidebarExpanded = !isSidebarExpanded }) {
+                            Icon(
+                                imageVector = if (isSidebarExpanded) Icons.Filled.MenuOpen else Icons.Filled.Menu,
+                                contentDescription = if (isSidebarExpanded) "Ocultar menú" else "Mostrar menú"
+                            )
+                        }
+                    },
                     actions = {
                         IconButton(onClick = {
                             scope.launch {
@@ -67,7 +87,7 @@ fun NexusApp() {
                         }) {
                             Icon(Icons.Filled.Refresh, contentDescription = "Actualizar")
                         }
-                        
+
                         BadgedBox(
                             badge = {
                                 if (unreadCount > 0) {
@@ -84,7 +104,7 @@ fun NexusApp() {
                         containerColor = MaterialTheme.colorScheme.surface
                     )
                 )
-                
+
                 // Main content
                 NavHost(
                     navController = navController,
@@ -105,11 +125,49 @@ fun NexusApp() {
                 }
             }
         }
-        
-        // Notification panel
-        if (showNotifications) {
-            Box(
-                modifier = Modifier
+
+        // Panel de notificaciones
+        AnimatedVisibility(
+            visible = showNotifications,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { -20 }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { -20 }),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 60.dp, end = 16.dp)
+        ) {
+            NotificationPanel(
+                notifications = notifications,
+                onNotificationClick = { notification ->
+                    scope.launch {
+                        db.notificationDao().update(notification.copy(read = true))
+                        showNotifications = false
+                        if (notification.section.isNotEmpty()) {
+                            val screen = Screen.items.find { it.route == notification.section }
+                            if (screen != null) {
+                                navigateToScreen(screen)
+                            }
+                        }
+                    }
+                },
+                onMarkAsRead = { notification ->
+                    scope.launch {
+                        db.notificationDao().update(notification.copy(read = true))
+                    }
+                },
+                onDelete = { notification ->
+                    scope.launch {
+                        db.notificationDao().delete(notification)
+                    }
+                },
+                onMarkAllRead = {
+                    scope.launch {
+                        db.notificationDao().markAllAsRead()
+                    }
+                }
+            )
+        }
+    }
+}                modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 60.dp, end = 16.dp)
             ) {
