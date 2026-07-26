@@ -41,23 +41,18 @@ fun NexusApp() {
         }
     }
 
-    // Cerrar sidebar al seleccionar una pantalla en móvil
-    fun navigateToScreen(screen: Screen) {
-        selectedScreen = screen
-        navController.navigate(screen.route) {
-            popUpTo(Screen.Dashboard.route) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
             // Sidebar
             Sidebar(
                 selectedItem = selectedScreen,
                 onItemSelected = { screen ->
-                    navigateToScreen(screen)
+                    selectedScreen = screen
+                    navController.navigate(screen.route) {
+                        popUpTo(Screen.Dashboard.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 },
                 isExpanded = isSidebarExpanded,
                 onToggle = { isSidebarExpanded = !isSidebarExpanded }
@@ -69,11 +64,10 @@ fun NexusApp() {
                 SmallTopAppBar(
                     title = { Text(selectedScreen.title) },
                     navigationIcon = {
-                        // Botón de hamburguesa para mostrar/ocultar sidebar
                         IconButton(onClick = { isSidebarExpanded = !isSidebarExpanded }) {
                             Icon(
-                                imageVector = if (isSidebarExpanded) Icons.Filled.MenuOpen else Icons.Filled.Menu,
-                                contentDescription = if (isSidebarExpanded) "Ocultar menú" else "Mostrar menú"
+                                imageVector = Icons.Filled.Menu,
+                                contentDescription = if (isSidebarExpanded) "Ocultar menu" else "Mostrar menu"
                             )
                         }
                     },
@@ -144,7 +138,12 @@ fun NexusApp() {
                         if (notification.section.isNotEmpty()) {
                             val screen = Screen.items.find { it.route == notification.section }
                             if (screen != null) {
-                                navigateToScreen(screen)
+                                selectedScreen = screen
+                                navController.navigate(screen.route) {
+                                    popUpTo(Screen.Dashboard.route) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
                         }
                     }
@@ -165,44 +164,6 @@ fun NexusApp() {
                     }
                 }
             )
-        }
-    }
-}                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 60.dp, end = 16.dp)
-            ) {
-                NotificationPanel(
-                    notifications = notifications,
-                    onNotificationClick = { notification ->
-                        scope.launch {
-                            db.notificationDao().update(notification.copy(read = true))
-                            showNotifications = false
-                            if (notification.section.isNotEmpty()) {
-                                val screen = Screen.items.find { it.route == notification.section }
-                                if (screen != null) {
-                                    selectedScreen = screen
-                                    navController.navigate(screen.route)
-                                }
-                            }
-                        }
-                    },
-                    onMarkAsRead = { notification ->
-                        scope.launch {
-                            db.notificationDao().update(notification.copy(read = true))
-                        }
-                    },
-                    onDelete = { notification ->
-                        scope.launch {
-                            db.notificationDao().delete(notification)
-                        }
-                    },
-                    onMarkAllRead = {
-                        scope.launch {
-                            db.notificationDao().markAllAsRead()
-                        }
-                    }
-                )
-            }
         }
     }
 }
