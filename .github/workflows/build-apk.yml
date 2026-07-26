@@ -28,14 +28,10 @@ jobs:
           build-tools: 34.0.0
 
       - name: Create local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "Local properties created"
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
       - name: Create gradle wrapper directory
-        run: |
-          mkdir -p gradle/wrapper
-          echo "Gradle wrapper directory created"
+        run: mkdir -p gradle/wrapper
 
       - name: Create gradle-wrapper.properties
         run: |
@@ -46,12 +42,9 @@ jobs:
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
           PROPEOF
-          echo "gradle-wrapper.properties created"
 
       - name: Download gradle-wrapper.jar
-        run: |
-          wget -q -O gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/v8.5.0/gradle/wrapper/gradle-wrapper.jar
-          echo "gradle-wrapper.jar downloaded"
+        run: wget -q -O gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/v8.5.0/gradle/wrapper/gradle-wrapper.jar
 
       - name: Create gradlew script
         run: |
@@ -60,28 +53,27 @@ jobs:
           java -cp gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain "\$@"
           SCRIPTEOF
           chmod +x gradlew
-          echo "gradlew script created"
 
       - name: Fix HorizontalDivider errors
         run: |
           find . -name "*.kt" -type f -exec sed -i 's/HorizontalDivider/Divider/g' {} +
           find . -name "*.kt" -type f -exec sed -i '/import.*HorizontalDivider/d' {} +
-          echo "Kotlin errors fixed"
+
+      - name: Fix RestockScreen clickable error
+        run: |
+          RESTOK_FILE="app/src/main/java/com/nexus/admin/ui/screens/RestockScreen.kt"
+          if [ -f "$RESTOK_FILE" ]; then
+            echo "Corrigiendo RestockScreen..."
+            sed -i 's/\.clickable\b/\.clickable(/g' "$RESTOK_FILE"
+            sed -i 's/Modifier\.clickable(/Modifier.clickable(onClick = /g' "$RESTOK_FILE"
+            echo "RestockScreen corregido"
+          else
+            echo "RestockScreen no encontrado en la ruta esperada"
+            find . -name "RestockScreen.kt" -type f
+          fi
 
       - name: Build Debug APK
-        run: |
-          ./gradlew assembleDebug --no-daemon --stacktrace
-          echo "Build completed"
-
-      - name: Check APK exists
-        run: |
-          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
-            echo "APK found successfully"
-            ls -lh app/build/outputs/apk/debug/app-debug.apk
-          else
-            echo "ERROR: APK not found"
-            find . -name "*.apk" || echo "No APK files found"
-          fi
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
