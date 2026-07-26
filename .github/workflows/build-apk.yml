@@ -2,157 +2,89 @@ name: Build Nexus Admin APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    
-    - name: Setup Java 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-    
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        api-level: 34
-        build-tools: 34.0.0
-    
-    - name: Create project files
-      run: |
-        echo "Creando archivos necesarios..."
-        
-        # Crear local.properties
-        echo "sdk.dir=$ANDROID_HOME" > local.properties
-        
-        # Crear gradle-wrapper.properties
-        mkdir -p gradle/wrapper
-        cat > gradle/wrapper/gradle-wrapper.properties << 'PROPS'
-        distributionBase=GRADLE_USER_HOME
-        distributionPath=wrapper/dists
-        distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
-        zipStoreBase=GRADLE_USER_HOME
-        zipStorePath=wrapper/dists
-        PROPS
-        
-        # Descargar gradle-wrapper.jar
-        wget -q -O gradle/wrapper/gradle-wrapper.jar \
-          https://github.com/gradle/gradle/raw/v8.5.0/gradle/wrapper/gradle-wrapper.jar
-        
-        # Crear gradlew
-        cat > gradlew << 'SCRIPT'
-        #!/bin/bash
-        export GRADLE_OPTS="-Dfile.encoding=UTF-8"
-        java -cp gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain "$@"
-        SCRIPT
-        chmod +x gradlew
-        
-        echo "Archivos creados correctamente"
-    
-    - name: Fix Kotlin errors
-      run: |
-        echo "Corrigiendo errores de compilacion..."
-        
-        # Reemplazar HorizontalDivider por Divider
-        find . -name "*.kt" -type f -exec sed -i 's/HorizontalDivider/Divider/g' {} \;
-        
-        # Eliminar imports incorrectos de HorizontalDivider
-        find . -name "*.kt" -type f -exec sed -i '/import.*HorizontalDivider/d' {} \;
-        
-        echo "Correcciones aplicadas"
-    
-    - name: Build Debug APK
-      run: |
-        echo "Compilando APK..."
-        ./gradlew assembleDebug --no-daemon --stacktrace
-    
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: NexusAdmin-Debug-APK
-        path: app/build/outputs/apk/debug/app-debug.apk        networkTimeout=10000
-        validateDistributionUrl=true
-        zipStoreBase=GRADLE_USER_HOME
-        zipStorePath=wrapper/dists
-        EOF
-        echo "✅ gradle-wrapper.properties creado"
-        
-    - name: Generate Gradle Wrapper
-      run: |
-        gradle wrapper --gradle-version 8.5
-        echo "✅ Gradle Wrapper generado"
-        chmod +x gradlew
-        
-    - name: Verify fixes
-      run: |
-        echo "=== Verificando correcciones ==="
-        echo "Archivos con HorizontalDivider sin import:"
-        grep -rl "HorizontalDivider" app/src/main/java/ | while read file; do
-          if ! grep -q "import androidx.compose.material3.HorizontalDivider" "$file"; then
-            echo "  ❌ $file"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
+
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "Local properties created"
+
+      - name: Create gradle wrapper directory
+        run: |
+          mkdir -p gradle/wrapper
+          echo "Gradle wrapper directory created"
+
+      - name: Create gradle-wrapper.properties
+        run: |
+          cat > gradle/wrapper/gradle-wrapper.properties << PROPEOF
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          PROPEOF
+          echo "gradle-wrapper.properties created"
+
+      - name: Download gradle-wrapper.jar
+        run: |
+          wget -q -O gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/v8.5.0/gradle/wrapper/gradle-wrapper.jar
+          echo "gradle-wrapper.jar downloaded"
+
+      - name: Create gradlew script
+        run: |
+          cat > gradlew << SCRIPTEOF
+          #!/bin/bash
+          java -cp gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain "\$@"
+          SCRIPTEOF
+          chmod +x gradlew
+          echo "gradlew script created"
+
+      - name: Fix HorizontalDivider errors
+        run: |
+          find . -name "*.kt" -type f -exec sed -i 's/HorizontalDivider/Divider/g' {} +
+          find . -name "*.kt" -type f -exec sed -i '/import.*HorizontalDivider/d' {} +
+          echo "Kotlin errors fixed"
+
+      - name: Build Debug APK
+        run: |
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          echo "Build completed"
+
+      - name: Check APK exists
+        run: |
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            echo "APK found successfully"
+            ls -lh app/build/outputs/apk/debug/app-debug.apk
           else
-            echo "  ✅ $file"
+            echo "ERROR: APK not found"
+            find . -name "*.apk" || echo "No APK files found"
           fi
-        done
-        
-    - name: Build Debug APK
-      run: |
-        echo "=== Compilando APK Debug ==="
-        ./gradlew assembleDebug --stacktrace --no-daemon
-        
-    - name: Check APK
-      run: |
-        echo "=== Verificando APK generado ==="
-        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
-          APK_SIZE=$(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)
-          echo "✅ APK Debug generado exitosamente"
-          echo "📦 Tamaño: $APK_SIZE"
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
-        else
-          echo "❌ No se encontró el APK Debug"
-          find . -name "*.apk" 2>/dev/null || echo "No se encontraron APKs"
-          exit 1
-        fi
-        
-    - name: Upload Debug APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: NexusAdmin-APK
-        path: app/build/outputs/apk/debug/app-debug.apk
-        retention-days: 90
-        
-    - name: Build Release APK
-      run: |
-        echo "=== Generando keystore para release ==="
-        keytool -genkey -v \
-          -keystore app/nexus-admin.jks \
-          -alias nexusadmin \
-          -keyalg RSA \
-          -keysize 2048 \
-          -validity 10000 \
-          -storepass nexusadmin123 \
-          -keypass nexusadmin123 \
-          -dname "CN=Nexus Admin, OU=Dev, O=Nexus, L=City, ST=State, C=US" \
-          -noprompt 2>/dev/null || echo "Keystore ya existe"
-          
-        echo "=== Compilando APK Release ==="
-        export KEYSTORE_PASSWORD=nexusadmin123
-        export KEY_ALIAS=nexusadmin
-        export KEY_PASSWORD=nexusadmin123
-        ./gradlew assembleRelease --stacktrace --no-daemon || echo "⚠️ Release build failed"
-      continue-on-error: true
-      
-    - name: Upload Release APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: NexusAdmin-Release-APK
-        path: app/build/outputs/apk/release/app-release.apk
-        retention-days: 90
-      continue-on-error: true
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusAdmin-Debug-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
