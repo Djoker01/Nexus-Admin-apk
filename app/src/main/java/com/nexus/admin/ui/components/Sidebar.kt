@@ -66,15 +66,59 @@ fun Sidebar(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Header con logo y botón de toggle
-            SidebarHeader(
-                isExpanded = isExpanded,
-                onToggle = onToggle
-            )
+            // Header
+            if (isExpanded) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Nexus",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Admin",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Green
+                        )
+                    }
+                    IconButton(onClick = onToggle, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.Filled.MenuOpen,
+                            contentDescription = "Colapsar menu",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    IconButton(onClick = onToggle, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            imageVector = Icons.Filled.Menu,
+                            contentDescription = "Expandir menu",
+                            tint = Green,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+            }
 
             Divider()
 
-            // Lista de navegación
+            // Navigation items
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -82,17 +126,70 @@ fun Sidebar(
             ) {
                 items(navItems) { item ->
                     val isSelected = selectedItem == item.screen
-
-                    NavigationItem(
-                        item = item,
-                        isSelected = isSelected,
-                        isExpanded = isExpanded,
-                        onClick = { onItemSelected(item.screen) }
+                    val bgColor by animateColorAsState(
+                        targetValue = if (isSelected) Green.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
+                        animationSpec = tween(durationMillis = 200),
+                        label = "nav_bg"
                     )
+                    val contentColor by animateColorAsState(
+                        targetValue = if (isSelected) Green else MaterialTheme.colorScheme.onSurfaceVariant,
+                        animationSpec = tween(durationMillis = 200),
+                        label = "nav_content"
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(bgColor)
+                            .clickable(onClick = { onItemSelected(item.screen) })
+                            .padding(
+                                horizontal = if (isExpanded) 16.dp else 0.dp,
+                                vertical = 12.dp
+                            ),
+                        horizontalArrangement = if (isExpanded) Arrangement.Start else Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isSelected) item.selectedIcon else item.icon,
+                                contentDescription = item.screen.title,
+                                tint = contentColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        AnimatedVisibility(
+                            visible = isExpanded,
+                            enter = fadeIn(animationSpec = tween(200)) + slideInHorizontally(
+                                animationSpec = tween(200),
+                                initialOffsetX = { -20 }
+                            ),
+                            exit = fadeOut(animationSpec = tween(200)) + slideOutHorizontally(
+                                animationSpec = tween(200),
+                                targetOffsetX = { -20 }
+                            )
+                        ) {
+                            Row {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = item.screen.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = contentColor,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            // Footer con versión
+            // Footer
             if (isExpanded) {
                 Divider()
                 Box(
@@ -106,179 +203,6 @@ fun Sidebar(
                         style = MaterialTheme.typography.bodySmall,
                         color = Gray500
                     )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SidebarHeader(
-    isExpanded: Boolean,
-    onToggle: () -> Unit
-) {
-    if (isExpanded) {
-        // Header expandido con logo y botón de colapsar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Nexus",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Admin",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Green
-                )
-            }
-
-            IconButton(
-                onClick = onToggle,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.MenuOpen,
-                    contentDescription = "Colapsar menú",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-    } else {
-        // Header colapsado solo con botón de expandir
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            IconButton(
-                onClick = onToggle,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Menu,
-                    contentDescription = "Expandir menú",
-                    tint = Green,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NavigationItem(
-    item: NavItemData,
-    isSelected: Boolean,
-    isExpanded: Boolean,
-    onClick: () -> Unit
-) {
-    val backgroundColor by animateColorAsState(
-        targetValue = if (isSelected) Green.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
-        animationSpec = tween(durationMillis = 200),
-        label = "nav_bg"
-    )
-
-    val contentColor by animateColorAsState(
-        targetValue = if (isSelected) Green else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = tween(durationMillis = 200),
-        label = "nav_content"
-    )
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(backgroundColor)
-            .clickable(onClick = onClick)
-            .padding(
-                horizontal = if (isExpanded) 16.dp else 0.dp,
-                vertical = 12.dp
-            ),
-        horizontalArrangement = if (isExpanded) Arrangement.Start else Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Indicador de selección (solo cuando está expandido)
-        if (isSelected && isExpanded) {
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .height(32.dp)
-                    .background(
-                        color = Green,
-                        shape = RoundedCornerShape(2.dp)
-                    )
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-        }
-
-        // Icono
-        Box(
-            modifier = Modifier.size(40.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = if (isSelected) item.selectedIcon else item.icon,
-                contentDescription = item.screen.title,
-                tint = contentColor,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-
-        // Texto (solo cuando está expandido)
-        AnimatedVisibility(
-            visible = isExpanded,
-            enter = fadeIn(animationSpec = tween(200)) + slideInHorizontally(
-                animationSpec = tween(200),
-                initialOffsetX = { -20 }
-            ),
-            exit = fadeOut(animationSpec = tween(200)) + slideOutHorizontally(
-                animationSpec = tween(200),
-                targetOffsetX = { -20 }
-            )
-        ) {
-            Row {
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = item.screen.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = contentColor,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        // Badge de notificación (ejemplo para Dashboard)
-        if (!isExpanded && item.screen == Screen.Dashboard) {
-            // Podrías agregar un badge aquí si hay notificaciones
-        }
-    }
-}                        )
-                        
-                        if (isSelected) {
-                            Spacer(modifier = Modifier.weight(1f))
-                            Box(
-                                modifier = Modifier
-                                    .width(3.dp)
-                                    .height(24.dp)
-                                    .background(Green)
-                            )
-                        }
-                    }
                 }
             }
         }
