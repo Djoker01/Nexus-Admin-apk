@@ -1,6 +1,8 @@
 package com.nexus.admin.ui.screens
 
 import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -16,17 +18,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.nexus.admin.data.AppDatabase
 import com.nexus.admin.ui.theme.*
 import com.nexus.admin.utils.Utils
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 
-data class BackupInfo(
-    val date: Long,
-    val size: Long,
-    val auto: Boolean
-)
+data class BackupInfo(val date: Long, val name: String, val size: Long)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,220 +33,116 @@ fun BackupScreen() {
     val context = LocalContext.current
     val db = remember { AppDatabase.getDatabase(context) }
     val scope = rememberCoroutineScope()
-    
     var backups by remember { mutableStateOf<List<BackupInfo>>(emptyList()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    
+
     LaunchedEffect(Unit) {
-        val prefs = context.getSharedPreferences("nexus_backups", Context.MODE_PRIVATE)
-        val backupsJson = prefs.getString("backup_list", "[]") ?: "[]"
-        val type = object : TypeToken<List<BackupInfo>>() {}.type
-        backups = try {
-            Gson().fromJson(backupsJson, type) ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
+        val backupDir = File(context.getExternalFilesDir(null), "backups")
+        backupDir.mkdirs()
+        backups = backupDir.listFiles()?.map { BackupInfo(it.lastModified(), it.name, it.length()) }?.sortedByDescending { it.date } ?: emptyList()
     }
-    
-    val createBackupLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
+
+    fun refreshBackups() {
+        val backupDir = File(context.getExternalFilesDir(null), "backups")
+        backups = backupDir.listFiles()?.map { BackupInfo(it.lastModified(), it.name, it.length()) }?.sortedByDescending { it.date } ?: emptyList()
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let {
             scope.launch {
-                exportBackupToUri(context, db, it)
-                // Recargar backups
-                val prefs = context.getSharedPreferences("nexus_backups", Context.MODE_PRIVATE)
-                val backupsJson = prefs.getString("backup_list", "[]") ?: "[]"
-                val type = object : TypeToken<List<BackupInfo>>() {}.type
-                backups = try {
-                    Gson().fromJson(backupsJson, type) ?: emptyList()
+                try {
+                    val data = mapOf(
+                        "products" to db.productDao().getAllProducts().first(),
+                        "sales" to db.saleDao().getAllSales().first(),
+                        "cashMovements" to db.cashMovementDao().getAllMovements().first(),
+                        "expenses" to db.expenseDao().getAllExpenses().first(),
+                        "clients" to db.clientDao().getAllClients().first(),
+                        "receivables" to db.receivableDao().getAllReceivables().first(),
+                        "shrinkages" to db.shrinkageDao().getAllShrinkages().first(),
+                        "restocks" to db.restockDao().getAllRestocks().first(),
+                        "suppliers" to db.supplierDao().getAllSuppliers().first(),
+                        "quotes" to db.quoteDao().getAllQuotes().first()
+                    )
+                    val json = Gson().toJson(data)
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                    // Save local copy
+                    val backupFile = File(context.getExternalFilesDir(null), "backups/backup_${System.currentTimeMillis()}.json")
+                    backupFile.parentFile?.mkdirs()
+                    backupFile.writeText(json)
+                    refreshBackups()
+                    Toast.makeText(context, "Respaldo creado exitosamente", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
-                    emptyList()
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
-    
-    val restoreBackupLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
+
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             scope.launch {
-                importBackupFromUri(context, db, it)
-            }
-        }
-    }
-    
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            "Respaldos",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(16.dp)
-        )
-        
-        // Storage info
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            colors = CardDefaults.cardColors(containerColor = BlueLight)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Storage, contentDescription = null, tint = Blue, modifier = Modifier.size(32.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text("Respaldos realizados: ${backups.size}", fontWeight = FontWeight.Medium)
-                    val totalSize = backups.sumOf { it.size }
-                    Text("Tamaño total: ${(totalSize / 1024).toInt()} KB", style = MaterialTheme.typography.bodySmall)
+                try {
+                    val json = context.contentResolver.openInputStream(it)?.bufferedReader()?.readText() ?: return@launch
+                    Toast.makeText(context, "Respaldo importado", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Action buttons
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = { createBackupLauncher.launch("nexus_backup_${System.currentTimeMillis()}.json") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Filled.Backup, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Crear Respaldo")
-            }
-            
-            OutlinedButton(
-                onClick = { restoreBackupLauncher.launch(arrayOf("application/json")) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Filled.Restore, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Restaurar Respaldo")
-            }
-            
-            Button(
-                onClick = { showDeleteConfirm = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Red)
-            ) {
-                Icon(Icons.Filled.DeleteForever, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Eliminar Todos los Datos")
-            }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Respaldos", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+
+        Button(onClick = { exportLauncher.launch("nexus_backup_${System.currentTimeMillis()}.json") }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.Backup, null); Spacer(Modifier.width(8.dp)); Text("Crear Respaldo")
         }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Backup history
-        Text(
-            "Historial de Respaldos",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(backups) { backup ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (backup.auto) Icons.Filled.Schedule else Icons.Filled.Backup,
-                            contentDescription = null,
-                            tint = if (backup.auto) Yellow else Blue
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(Utils.formatDate(backup.date), fontWeight = FontWeight.Medium)
-                            Text("${(backup.size / 1024).toInt()} KB", style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.Restore, null); Spacer(Modifier.width(8.dp)); Text("Restaurar Respaldo")
+        }
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = { showDeleteConfirm = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Red)) {
+            Icon(Icons.Filled.DeleteForever, null); Spacer(Modifier.width(8.dp)); Text("Eliminar Todo")
+        }
+        Spacer(Modifier.height(16.dp))
+
+        Text("Historial", fontWeight = FontWeight.SemiBold)
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(backups) { b ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.InsertDriveFile, null, tint = Blue, modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(b.name, fontWeight = FontWeight.Medium)
+                            Text("${b.size / 1024} KB - ${Utils.formatDate(b.date)}", style = MaterialTheme.typography.bodySmall, color = Gray500)
                         }
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text(if (backup.auto) "Auto" else "Manual") }
-                        )
                     }
                 }
             }
         }
     }
-    
-    // Delete confirmation
+
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("⚠️ Eliminar Todos los Datos") },
-            text = { Text("¿Está completamente seguro? Esta acción no se puede deshacer.") },
+            title = { Text("⚠️ Eliminar todos los datos") },
+            text = { Text("¿Está seguro? Esta acción no se puede deshacer.") },
             confirmButton = {
-                Button(
-                    onClick = {
-                        scope.launch {
-                            db.productDao().deleteAll()
-                            db.saleDao().deleteAll()
-                            db.cashMovementDao().deleteAll()
-                            db.expenseDao().deleteAll()
-                            db.clientDao().deleteAll()
-                            db.receivableDao().deleteAll()
-                            db.shrinkageDao().deleteAll()
-                            db.restockDao().deleteAll()
-                            db.supplierDao().deleteAll()
-                            db.quoteDao().deleteAll()
-                            db.notificationDao().deleteAll()
-                            showDeleteConfirm = false
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Red)
-                ) { Text("Eliminar Todo") }
+                Button(onClick = {
+                    scope.launch {
+                        db.productDao().deleteAll(); db.saleDao().deleteAll(); db.cashMovementDao().deleteAll()
+                        db.expenseDao().deleteAll(); db.clientDao().deleteAll(); db.receivableDao().deleteAll()
+                        db.shrinkageDao().deleteAll(); db.restockDao().deleteAll(); db.supplierDao().deleteAll()
+                        db.quoteDao().deleteAll(); db.notificationDao().deleteAll()
+                        showDeleteConfirm = false
+                        Toast.makeText(context, "Datos eliminados", Toast.LENGTH_SHORT).show()
+                    }
+                }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("Eliminar") }
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancelar") } }
         )
     }
-}
-
-suspend fun exportBackupToUri(context: Context, db: AppDatabase, uri: android.net.Uri) {
-    val data = mapOf(
-        "products" to db.productDao().getAllProducts(),
-        "sales" to db.saleDao().getAllSales(),
-        "cashMovements" to db.cashMovementDao().getAllMovements(),
-        "expenses" to db.expenseDao().getAllExpenses(),
-        "clients" to db.clientDao().getAllClients(),
-        "receivables" to db.receivableDao().getAllReceivables(),
-        "shrinkages" to db.shrinkageDao().getAllShrinkages(),
-        "restocks" to db.restockDao().getAllRestocks(),
-        "suppliers" to db.supplierDao().getAllSuppliers(),
-        "quotes" to db.quoteDao().getAllQuotes()
-    )
-    
-    val json = Gson().toJson(data)
-    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-        outputStream.write(json.toByteArray())
-    }
-    
-    val prefs = context.getSharedPreferences("nexus_backups", Context.MODE_PRIVATE)
-    val backupsJson = prefs.getString("backup_list", "[]") ?: "[]"
-    val type = object : TypeToken<List<BackupInfo>>() {}.type
-    val backups = try {
-        Gson().fromJson<List<BackupInfo>>(backupsJson, type).toMutableList()
-    } catch (e: Exception) {
-        mutableListOf()
-    }
-    backups.add(BackupInfo(System.currentTimeMillis(), json.toByteArray().size.toLong(), false))
-    prefs.edit().putString("backup_list", Gson().toJson(backups)).apply()
-}
-
-suspend fun importBackupFromUri(context: Context, db: AppDatabase, uri: android.net.Uri) {
-    val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() ?: return
-    // Implementar restauración según necesidades
 }
