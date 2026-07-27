@@ -1,5 +1,10 @@
 package com.nexus.admin.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,8 +23,6 @@ import com.nexus.admin.data.entity.*
 import com.nexus.admin.ui.theme.*
 import com.nexus.admin.utils.Utils
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,31 +50,84 @@ fun SalesScreen() {
 
     val filteredSales = remember(sales, filterDate) {
         if (filterDate.isEmpty()) sales
-        else sales.filter { Utils.formatDate(it.date).contains(filterDate) }
+        else sales.filter { Utils.formatDate(it.date).contains(filterDate, ignoreCase = true) }
+    }
+
+    // Escáner
+    val scannerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.getStringExtra("SCAN_RESULT")?.let { barcode ->
+                // Buscar producto por SKU
+                scope.launch {
+                    db.productDao().getAllProducts().collect { products ->
+                        val found = products.find { it.sku == barcode }
+                        if (found != null) {
+                            Toast.makeText(context, "Producto encontrado: ${found.name}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text("Ventas", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Button(onClick = { showSaleDialog = true }) { Icon(Icons.Filled.ShoppingCart, null); Spacer(Modifier.width(4.dp)); Text("Nueva Venta") }
+            Button(onClick = { showSaleDialog = true }) {
+                Icon(Icons.Filled.ShoppingCart, null)
+                Spacer(Modifier.width(4.dp))
+                Text("Nueva Venta")
+            }
         }
 
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Card(modifier = Modifier.weight(1f)) { Column(Modifier.padding(8.dp)) { Text("Ventas Hoy"); Text("$${Utils.formatCurrency(todaySales)}", fontWeight = FontWeight.Bold, color = Green) } }
-            Card(modifier = Modifier.weight(1f)) { Column(Modifier.padding(8.dp)) { Text("Transacciones"); Text("$transactionCount", fontWeight = FontWeight.Bold) } }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Card(Modifier.weight(1f)) {
+                Column(Modifier.padding(8.dp)) {
+                    Text("Ventas Hoy", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                    Text("$${Utils.formatCurrency(todaySales)}", fontWeight = FontWeight.Bold, color = Green)
+                }
+            }
+            Card(Modifier.weight(1f)) {
+                Column(Modifier.padding(8.dp)) {
+                    Text("Transacciones", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                    Text("$transactionCount", fontWeight = FontWeight.Bold)
+                }
+            }
         }
 
-        OutlinedTextField(filterDate, { filterDate = it }, label = { Text("Filtrar fecha (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth().padding(16.dp), singleLine = true)
+        OutlinedTextField(
+            filterDate,
+            { filterDate = it },
+            label = { Text("Filtrar por fecha (YYYY-MM-DD)") },
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            singleLine = true
+        )
 
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             items(filteredSales) { sale ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(sale.client.ifEmpty { "General" }, fontWeight = FontWeight.SemiBold)
                             Text(Utils.formatDate(sale.date), style = MaterialTheme.typography.bodySmall, color = Gray500)
                         }
-                        Text(sale.products.joinToString(", ") { "${it.name} x${it.quantity}" }, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            sale.products.joinToString(", ") { "${it.name} x${it.quantity}" },
+                            style = MaterialTheme.typography.bodySmall
+                        )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Total: $${Utils.formatCurrency(sale.total)}", fontWeight = FontWeight.Bold, color = Green)
                             SuggestionChip(onClick = {}, label = { Text(sale.paymentMethod) })
@@ -86,90 +142,183 @@ fun SalesScreen() {
     if (showSaleDialog) {
         var client by remember { mutableStateOf("") }
         var paymentMethod by remember { mutableStateOf("Efectivo") }
-        var selectedProducts by remember { mutableStateOf<MutableMap<Long, Triple<Product, Int, Double>>>(mutableMapOf()) }
+        var selectedProducts by remember { mutableStateOf<MutableMap<Long, Pair<Product, Int>>>(mutableMapOf()) }
         var allProducts by remember { mutableStateOf<List<Product>>(emptyList()) }
         var showProductPicker by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) { db.productDao().getAllProducts().collect { allProducts = it } }
 
-        val total = selectedProducts.values.sumOf { (_, qty, price) -> price * qty }
+        val total = selectedProducts.values.sumOf { (p, qty) -> p.price * qty }
 
         AlertDialog(
             onDismissRequest = { showSaleDialog = false },
             title = { Text("Nueva Venta") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(client, { client = it }, label = { Text("Cliente") })
+                    OutlinedTextField(client, { client = it }, label = { Text("Cliente") }, singleLine = true)
+                    
                     var payExpanded by remember { mutableStateOf(false) }
                     Box {
-                        OutlinedButton(onClick = { payExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text(paymentMethod); Icon(Icons.Filled.ArrowDropDown, null) }
+                        OutlinedButton(
+                            onClick = { payExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Pago: $paymentMethod")
+                            Icon(Icons.Filled.ArrowDropDown, null)
+                        }
                         DropdownMenu(payExpanded, { payExpanded = false }) {
                             listOf("Efectivo", "Tarjeta", "Transferencia").forEach {
-                                DropdownMenuItem(text = { Text(it) }, onClick = { paymentMethod = it; payExpanded = false })
+                                DropdownMenuItem(
+                                    text = { Text(it) },
+                                    onClick = { paymentMethod = it; payExpanded = false }
+                                )
                             }
                         }
                     }
 
-                    selectedProducts.forEach { (_, triple) ->
-                        val (product, qty, _) = triple
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(product.name, fontWeight = FontWeight.Medium)
-                                Text("Precio: $${Utils.formatCurrency(product.price)}", style = MaterialTheme.typography.bodySmall)
-                            }
-                            OutlinedTextField(qty.toString(), { newQty ->
-                                val q = newQty.toIntOrNull() ?: 1
-                                if (q > 0 && q <= product.stock) {
-                                    selectedProducts = selectedProducts.toMutableMap().also { it[product.id] = Triple(product, q, product.price) }
+                    // Productos seleccionados con cantidades
+                    selectedProducts.forEach { (id, pair) ->
+                        val (product, qty) = pair
+                        Card(Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(product.name, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        "Precio: $${Utils.formatCurrency(product.price)} | Stock: ${product.stock}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 }
-                            }, modifier = Modifier.width(70.dp), singleLine = true)
-                            Spacer(Modifier.width(8.dp))
-                            Text("$${Utils.formatCurrency(product.price * qty)}", fontWeight = FontWeight.Bold)
-                            IconButton(onClick = { selectedProducts = selectedProducts.toMutableMap().also { it.remove(product.id) } }) {
-                                Icon(Icons.Filled.RemoveCircle, "Eliminar", tint = Red)
+                                // Selector de cantidad
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            if (qty > 1) {
+                                                selectedProducts = selectedProducts.toMutableMap().also {
+                                                    it[id] = product to (qty - 1)
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Remove, "Menos", modifier = Modifier.size(18.dp))
+                                    }
+                                    Text(
+                                        "$qty",
+                                        modifier = Modifier.padding(horizontal = 8.dp),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            if (qty < product.stock) {
+                                                selectedProducts = selectedProducts.toMutableMap().also {
+                                                    it[id] = product to (qty + 1)
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Add, "Más", modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                                Text(
+                                    "$${Utils.formatCurrency(product.price * qty)}",
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                                IconButton(onClick = {
+                                    selectedProducts = selectedProducts.toMutableMap().also { it.remove(id) }
+                                }) {
+                                    Icon(Icons.Filled.Delete, "Eliminar", tint = Red, modifier = Modifier.size(20.dp))
+                                }
                             }
                         }
                     }
 
-                    OutlinedButton(onClick = { showProductPicker = true }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Filled.Add, null); Text("Agregar Producto")
-                    }
-                    OutlinedButton(onClick = { /* Scanner */ }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Filled.QrCodeScanner, null); Text("Escanear Producto")
+                    // Botones Agregar y Escanear
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { showProductPicker = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Filled.Add, null)
+                            Text("Agregar")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    val intent = Intent("com.google.zxing.client.android.SCAN").apply {
+                                        putExtra("SCAN_MODE", "PRODUCT_MODE")
+                                    }
+                                    scannerLauncher.launch(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "App de escáner no disponible", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Filled.QrCodeScanner, null)
+                            Text("Escanear")
+                        }
                     }
 
-                    Text("Total: $${Utils.formatCurrency(total)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Green)
+                    Text(
+                        "Total: $${Utils.formatCurrency(total)}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Green
+                    )
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    scope.launch {
-                        if (selectedProducts.isNotEmpty()) {
-                            val productsList = selectedProducts.values.map { (p, q, pr) -> SaleProduct(p.id, p.name, q, pr, p.cost) }
-                            val totalAmount = productsList.sumOf { it.price * it.quantity }
-                            val totalCost = productsList.sumOf { it.cost * it.quantity }
-                            val sale = Sale(client = client, products = productsList, total = totalAmount, cost = totalCost, paymentMethod = paymentMethod)
-                            db.saleDao().insert(sale)
+                Button(
+                    onClick = {
+                        scope.launch {
+                            if (selectedProducts.isNotEmpty()) {
+                                val productsList = selectedProducts.values.map { (p, q) ->
+                                    SaleProduct(p.id, p.name, q, p.price, p.cost)
+                                }
+                                val totalAmount = productsList.sumOf { it.price * it.quantity }
+                                val totalCost = productsList.sumOf { it.cost * it.quantity }
 
-                            // Update stock
-                            selectedProducts.values.forEach { (product, qty, _) ->
-                                db.productDao().update(product.copy(stock = product.stock - qty))
+                                val sale = Sale(
+                                    client = client,
+                                    products = productsList,
+                                    total = totalAmount,
+                                    cost = totalCost,
+                                    paymentMethod = paymentMethod
+                                )
+                                db.saleDao().insert(sale)
+
+                                // Actualizar stock
+                                selectedProducts.values.forEach { (product, qty) ->
+                                    db.productDao().update(product.copy(stock = product.stock - qty))
+                                }
+
+                                // Registrar en caja si es efectivo
+                                if (paymentMethod == "Efectivo") {
+                                    db.cashMovementDao().insert(
+                                        CashMovement(
+                                            type = "Ingreso",
+                                            amount = totalAmount,
+                                            description = "Venta - ${productsList.size} productos"
+                                        )
+                                    )
+                                }
+
+                                showSaleDialog = false
                             }
-
-                            // Register in cash if cash
-                            if (paymentMethod == "Efectivo") {
-                                db.cashMovementDao().insert(CashMovement(type = "Ingreso", amount = totalAmount, description = "Venta - ${productsList.size} productos"))
-                            }
-
-                            showSaleDialog = false
                         }
-                    }
-                }, enabled = selectedProducts.isNotEmpty()) { Text("Completar Venta") }
+                    },
+                    enabled = selectedProducts.isNotEmpty()
+                ) { Text("Completar Venta") }
             },
             dismissButton = { TextButton(onClick = { showSaleDialog = false }) { Text("Cancelar") } }
         )
 
-        // Product picker
+        // Product Picker
         if (showProductPicker) {
             AlertDialog(
                 onDismissRequest = { showProductPicker = false },
@@ -179,10 +328,14 @@ fun SalesScreen() {
                         items(allProducts) { product ->
                             ListItem(
                                 headlineContent = { Text(product.name) },
-                                supportingContent = { Text("Stock: ${product.stock} | $${Utils.formatCurrency(product.price)}") },
+                                supportingContent = {
+                                    Text("Stock: ${product.stock} | $${Utils.formatCurrency(product.price)}")
+                                },
                                 modifier = Modifier.clickable {
                                     if (product.stock > 0 && !selectedProducts.containsKey(product.id)) {
-                                        selectedProducts = selectedProducts.toMutableMap().also { it[product.id] = Triple(product, 1, product.price) }
+                                        selectedProducts = selectedProducts.toMutableMap().also {
+                                            it[product.id] = product to 1
+                                        }
                                     }
                                     showProductPicker = false
                                 }
