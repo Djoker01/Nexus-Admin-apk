@@ -158,10 +158,21 @@ fun ReceivablesScreen() {
                         if (a > 0 && a <= receivable.balance) {
                             val newBalance = receivable.balance - a
                             val newStatus = when { newBalance == 0.0 -> "paid"; newBalance < receivable.totalAmount -> "partial"; else -> "pending" }
-                            db.receivableDao().update(receivable.copy(balance = newBalance, status = newStatus, payments = receivable.payments + Payment(a, payMethod)))
-                            if (payMethod == "Efectivo") db.cashMovementDao().insert(CashMovement("Ingreso", a, "Abono: ${receivable.clientName}"))
-                            showPayment = null
-                        }
+db.receivableDao().update(receivable.copy(
+    balance = newBalance, 
+    status = newStatus, 
+    payments = receivable.payments + Payment(amount = a, date = System.currentTimeMillis(), method = payMethod)
+))
+if (payMethod == "Efectivo") {
+    db.cashMovementDao().insert(
+        CashMovement(
+            type = "Ingreso", 
+            amount = a, 
+            description = "Abono: ${receivable.clientName} - ${receivable.concept}",
+            date = System.currentTimeMillis()
+        )
+    )
+}
                     }
                 }) { Text("Registrar") }
             },
