@@ -1,5 +1,9 @@
 package com.nexus.admin.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
 import com.nexus.admin.data.AppDatabase
 import com.nexus.admin.data.entity.Product
 import com.nexus.admin.ui.theme.*
@@ -27,68 +32,137 @@ fun InventoryScreen() {
 
     var allProducts by remember { mutableStateOf<List<Product>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("") }
-    var categories by remember { mutableStateOf<List<String>>(emptyList()) }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<Product?>(null) }
 
-    // Cargar productos automáticamente
     LaunchedEffect(Unit) {
-        db.productDao().getAllProducts().collect { productList ->
-            allProducts = productList
-            categories = productList.map { it.category }.filter { it.isNotEmpty() }.distinct()
+        db.productDao().getAllProducts().collect { allProducts = it }
+    }
+
+    val filteredProducts = remember(searchQuery, allProducts) {
+        if (searchQuery.isEmpty()) allProducts
+        else allProducts.filter {
+            it.name.contains(searchQuery, ignoreCase = true) ||
+            it.sku.contains(searchQuery, ignoreCase = true)
         }
     }
 
-    // Filtrar productos
-    val filteredProducts = remember(searchQuery, selectedCategory, allProducts) {
-        allProducts.filter { product ->
-            (searchQuery.isEmpty() || product.name.contains(searchQuery, ignoreCase = true) || 
-             product.sku.contains(searchQuery, ignoreCase = true)) &&
-            (selectedCategory.isEmpty() || product.category == selectedCategory)
+    // Escáner de código de barras
+    val scannerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val barcode = result.data?.getStringExtra("SCAN_RESULT") ?: ""
+            if (barcode.isNotEmpty()) {
+                searchQuery = barcode
+                Toast.makeText(context, "Código escaneado: $barcode", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text("Inventario", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Button(onClick = { showAddDialog = true }) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(4.dp)); Text("Nuevo") }
+            Button(onClick = { showAddDialog = true }) {
+                Icon(Icons.Filled.Add, null)
+                Spacer(Modifier.width(4.dp))
+                Text("Nuevo")
+            }
         }
 
-        // Search bar
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            label = { Text("Buscar producto...") },
-            leadingIcon = { Icon(Icons.Filled.Search, null) },
-            trailingIcon = { if (searchQuery.isNotEmpty()) IconButton({ searchQuery = "" }) { Icon(Icons.Filled.Clear, "Limpiar") } },
+        // Barra de búsqueda con escáner
+        Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            singleLine = true
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Buscar...") },
+                leadingIcon = { Icon(Icons.Filled.Search, null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Filled.Clear, "Limpiar")
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            
+            // Botón de escanear
+            IconButton(
+                onClick = {
+                    try {
+                        val intent = Intent("com.google.zxing.client.android.SCAN").apply {
+                            putExtra("SCAN_MODE", "PRODUCT_MODE")
+                        }
+                        scannerLauncher.launch(intent)
+                    } catch (e: Exception) {
+                        // Si no hay app de escáner, mostrar entrada manual
+                        Toast.makeText(context, "Ingrese el código manualmente en la búsqueda", Toast.LENGTH_LONG).show()
+                    }
+                },
+                modifier = Modifier.size(56.dp)
+            ) {
+                Icon(
+                    Icons.Filled.QrCodeScanner,
+                    "Escanear código",
+                    tint = Blue,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(Modifier.height(8.dp))
 
-        // Category filter chips
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             items(filteredProducts) { product ->
                 val bgColor = when {
                     product.stock == 0 -> RedLight
                     product.stock <= product.minStock -> YellowLight
                     else -> MaterialTheme.colorScheme.surface
                 }
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = bgColor)) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = bgColor)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(product.name, fontWeight = FontWeight.SemiBold)
-                            Text("SKU: ${product.sku.ifEmpty { "N/A" }} | Stock: ${product.stock}", style = MaterialTheme.typography.bodySmall)
-                            Text("Precio: $${Utils.formatCurrency(product.price)} | Costo: $${Utils.formatCurrency(product.cost)}", style = MaterialTheme.typography.bodySmall, color = Gray500)
-                            if (product.stock <= product.minStock && product.stock > 0) Text("⚠️ Stock bajo", color = Yellow, style = MaterialTheme.typography.labelSmall)
-                            if (product.stock == 0) Text("❌ Agotado", color = Red, style = MaterialTheme.typography.labelSmall)
+                            Text("SKU: ${product.sku.ifEmpty { "N/A" }}", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "Stock: ${product.stock} | Precio: $${Utils.formatCurrency(product.price)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Gray500
+                            )
+                            if (product.stock <= product.minStock && product.stock > 0)
+                                Text("⚠️ Stock bajo", color = Yellow, style = MaterialTheme.typography.labelSmall)
+                            if (product.stock == 0)
+                                Text("❌ Agotado", color = Red, style = MaterialTheme.typography.labelSmall)
                         }
                         Row {
-                            IconButton(onClick = { editingProduct = product; showAddDialog = true }) { Icon(Icons.Filled.Edit, "Editar", tint = Blue) }
-                            IconButton(onClick = { scope.launch { db.productDao().delete(product) } }) { Icon(Icons.Filled.Delete, "Eliminar", tint = Red) }
+                            IconButton(onClick = { editingProduct = product; showAddDialog = true }) {
+                                Icon(Icons.Filled.Edit, "Editar", tint = Blue)
+                            }
+                            IconButton(onClick = {
+                                scope.launch { db.productDao().delete(product) }
+                            }) {
+                                Icon(Icons.Filled.Delete, "Eliminar", tint = Red)
+                            }
                         }
                     }
                 }
@@ -96,7 +170,7 @@ fun InventoryScreen() {
         }
     }
 
-    // Add/Edit dialog
+    // Add/Edit Dialog
     if (showAddDialog) {
         var name by remember { mutableStateOf(editingProduct?.name ?: "") }
         var sku by remember { mutableStateOf(editingProduct?.sku ?: "") }
@@ -111,19 +185,40 @@ fun InventoryScreen() {
             title = { Text(if (editingProduct != null) "Editar Producto" else "Nuevo Producto") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("Nombre") })
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(sku, { sku = it }, label = { Text("SKU") }, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { /* Barcode scanner - implementar */ }) { Icon(Icons.Filled.QrCodeScanner, "Escanear") }
+                    OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, singleLine = true)
+                    
+                    // SKU con botón de escanear
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            sku, { sku = it },
+                            label = { Text("SKU/Código") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        IconButton(
+                            onClick = {
+                                try {
+                                    val intent = Intent("com.google.zxing.client.android.SCAN").apply {
+                                        putExtra("SCAN_MODE", "PRODUCT_MODE")
+                                    }
+                                    scannerLauncher.launch(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "App de escáner no disponible", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.QrCodeScanner, "Escanear", tint = Blue)
+                        }
                     }
-                    OutlinedTextField(category, { category = it }, label = { Text("Categoría") })
+                    
+                    OutlinedTextField(category, { category = it }, label = { Text("Categoría") }, singleLine = true)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(cost, { cost = it }, label = { Text("Costo") }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(price, { price = it }, label = { Text("Precio") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(cost, { cost = it }, label = { Text("Costo") }, modifier = Modifier.weight(1f), singleLine = true)
+                        OutlinedTextField(price, { price = it }, label = { Text("Precio") }, modifier = Modifier.weight(1f), singleLine = true)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(stock, { stock = it }, label = { Text("Stock") }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(minStock, { minStock = it }, label = { Text("Stock Mín") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(stock, { stock = it }, label = { Text("Stock") }, modifier = Modifier.weight(1f), singleLine = true)
+                        OutlinedTextField(minStock, { minStock = it }, label = { Text("Stock Mín") }, modifier = Modifier.weight(1f), singleLine = true)
                     }
                 }
             },
@@ -132,7 +227,9 @@ fun InventoryScreen() {
                     scope.launch {
                         val p = Product(
                             id = editingProduct?.id ?: 0,
-                            name = name, sku = sku, category = category,
+                            name = name,
+                            sku = sku,
+                            category = category,
                             cost = cost.toDoubleOrNull() ?: 0.0,
                             price = price.toDoubleOrNull() ?: 0.0,
                             stock = stock.toIntOrNull() ?: 0,
@@ -140,11 +237,14 @@ fun InventoryScreen() {
                         )
                         if (editingProduct != null) db.productDao().update(p)
                         else db.productDao().insert(p)
-                        showAddDialog = false; editingProduct = null
+                        showAddDialog = false
+                        editingProduct = null
                     }
                 }) { Text("Guardar") }
             },
-            dismissButton = { TextButton(onClick = { showAddDialog = false; editingProduct = null }) { Text("Cancelar") } }
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false; editingProduct = null }) { Text("Cancelar") }
+            }
         )
     }
 }
