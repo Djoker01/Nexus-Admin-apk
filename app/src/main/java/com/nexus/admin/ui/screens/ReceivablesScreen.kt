@@ -38,7 +38,7 @@ fun ReceivablesScreen() {
     LaunchedEffect(Unit) {
         db.receivableDao().getAllReceivables().collect {
             receivables = it
-            totalPending = it.filter { r -> r.status != "paid" }.sumOf { r.balance }
+            totalPending = it.filter { r -> r.status != "paid" }.sumOf { it.balance }
             pendingCount = it.count { r -> r.status != "paid" }
         }
         db.clientDao().getAllClients().collect { clients = it }
