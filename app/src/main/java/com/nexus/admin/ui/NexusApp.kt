@@ -1,6 +1,9 @@
 package com.nexus.admin.ui
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -18,6 +21,7 @@ import com.nexus.admin.data.entity.AppNotification
 import com.nexus.admin.ui.components.*
 import com.nexus.admin.ui.navigation.Screen
 import com.nexus.admin.ui.screens.*
+import com.nexus.admin.ui.theme.*
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -32,7 +36,7 @@ fun NexusApp() {
     var showNotifications by remember { mutableStateOf(false) }
     var notifications by remember { mutableStateOf<List<AppNotification>>(emptyList()) }
     var unreadCount by remember { mutableStateOf(0) }
-    var isSidebarExpanded by remember { mutableStateOf(true) }
+    var isSidebarExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         db.notificationDao().getAllNotifications().collect {
@@ -41,128 +45,102 @@ fun NexusApp() {
         }
     }
 
+    fun navigateTo(screen: Screen) {
+        selectedScreen = screen
+        navController.navigate(screen.route) {
+            popUpTo(Screen.Dashboard.route) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    fun closeAllToggles() {
+        isSidebarExpanded = false
+        showNotifications = false
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
             // Sidebar
             Sidebar(
                 selectedItem = selectedScreen,
-                onItemSelected = { screen ->
-                    selectedScreen = screen
-                    navController.navigate(screen.route) {
-                        popUpTo(Screen.Dashboard.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
+                onItemSelected = { navigateTo(it) },
                 isExpanded = isSidebarExpanded,
-                onToggle = { isSidebarExpanded = !isSidebarExpanded }
+                onToggle = { isSidebarExpanded = !isSidebarExpanded },
+                onClose = { isSidebarExpanded = false }
             )
 
-            // Contenido principal
+            // Main content
             Column(modifier = Modifier.weight(1f)) {
-                // Top bar
                 SmallTopAppBar(
                     title = { Text(selectedScreen.title) },
                     navigationIcon = {
                         IconButton(onClick = { isSidebarExpanded = !isSidebarExpanded }) {
-                            Icon(
-                                imageVector = Icons.Filled.Menu,
-                                contentDescription = if (isSidebarExpanded) "Ocultar menu" else "Mostrar menu"
-                            )
+                            Icon(Icons.Filled.Menu, if (isSidebarExpanded) "Ocultar" else "Mostrar")
                         }
                     },
                     actions = {
                         IconButton(onClick = {
-                            scope.launch {
-                                navController.navigate(selectedScreen.route) {
-                                    popUpTo(selectedScreen.route) { inclusive = true }
-                                }
-                            }
+                            scope.launch { navController.navigate(selectedScreen.route) { popUpTo(selectedScreen.route) { inclusive = true } } }
                         }) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Actualizar")
+                            Icon(Icons.Filled.Refresh, "Actualizar")
                         }
-
-                        BadgedBox(
-                            badge = {
-                                if (unreadCount > 0) {
-                                    Badge { Text("$unreadCount") }
-                                }
-                            }
-                        ) {
+                        BadgedBox(badge = { if (unreadCount > 0) Badge { Text("$unreadCount") } }) {
                             IconButton(onClick = { showNotifications = !showNotifications }) {
-                                Icon(Icons.Filled.Notifications, contentDescription = "Notificaciones")
+                                Icon(Icons.Filled.Notifications, "Notificaciones")
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.smallTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
+                    colors = TopAppBarDefaults.smallTopAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
                 )
 
-                // Main content
-                NavHost(
-                    navController = navController,
-                    startDestination = Screen.Dashboard.route,
-                    modifier = Modifier.fillMaxSize()
+                // Click outside to close toggles
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { closeAllToggles() }
                 ) {
-                    composable(Screen.Dashboard.route) { DashboardScreen() }
-                    composable(Screen.Inventory.route) { InventoryScreen() }
-                    composable(Screen.Sales.route) { SalesScreen() }
-                    composable(Screen.Cash.route) { CashScreen() }
-                    composable(Screen.Expenses.route) { ExpensesScreen() }
-                    composable(Screen.Receivables.route) { ReceivablesScreen() }
-                    composable(Screen.Shrinkage.route) { ShrinkageScreen() }
-                    composable(Screen.Restock.route) { RestockScreen() }
-                    composable(Screen.Suppliers.route) { SuppliersScreen() }
-                    composable(Screen.Reports.route) { ReportsScreen() }
-                    composable(Screen.Backup.route) { BackupScreen() }
+                    NavHost(navController, startDestination = Screen.Dashboard.route, modifier = Modifier.fillMaxSize()) {
+                        composable(Screen.Dashboard.route) { DashboardScreen() }
+                        composable(Screen.Inventory.route) { InventoryScreen() }
+                        composable(Screen.Sales.route) { SalesScreen() }
+                        composable(Screen.Cash.route) { CashScreen() }
+                        composable(Screen.Expenses.route) { ExpensesScreen() }
+                        composable(Screen.Receivables.route) { ReceivablesScreen() }
+                        composable(Screen.Shrinkage.route) { ShrinkageScreen() }
+                        composable(Screen.Restock.route) { RestockScreen() }
+                        composable(Screen.Suppliers.route) { SuppliersScreen() }
+                        composable(Screen.Reports.route) { ReportsScreen() }
+                        composable(Screen.Backup.route) { BackupScreen() }
+                    }
                 }
             }
         }
 
-        // Panel de notificaciones
+        // Notification panel
         AnimatedVisibility(
             visible = showNotifications,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { -20 }),
-            exit = fadeOut() + slideOutVertically(targetOffsetY = { -20 }),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 60.dp, end = 16.dp)
+            enter = fadeIn() + slideInVertically { -20 },
+            exit = fadeOut() + slideOutVertically { -20 },
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 60.dp, end = 16.dp)
         ) {
             NotificationPanel(
                 notifications = notifications,
-                onNotificationClick = { notification ->
+                onNotificationClick = { n ->
                     scope.launch {
-                        db.notificationDao().update(notification.copy(read = true))
+                        db.notificationDao().update(n.copy(read = true))
                         showNotifications = false
-                        if (notification.section.isNotEmpty()) {
-                            val screen = Screen.items.find { it.route == notification.section }
-                            if (screen != null) {
-                                selectedScreen = screen
-                                navController.navigate(screen.route) {
-                                    popUpTo(Screen.Dashboard.route) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
+                        if (n.section.isNotEmpty()) {
+                            Screen.items.find { it.route == n.section }?.let { navigateTo(it) }
                         }
                     }
                 },
-                onMarkAsRead = { notification ->
-                    scope.launch {
-                        db.notificationDao().update(notification.copy(read = true))
-                    }
-                },
-                onDelete = { notification ->
-                    scope.launch {
-                        db.notificationDao().delete(notification)
-                    }
-                },
-                onMarkAllRead = {
-                    scope.launch {
-                        db.notificationDao().markAllAsRead()
-                    }
-                }
+                onMarkAsRead = { n -> scope.launch { db.notificationDao().update(n.copy(read = true)) } },
+                onDelete = { n -> scope.launch { db.notificationDao().delete(n) } },
+                onMarkAllRead = { scope.launch { db.notificationDao().markAllAsRead() } }
             )
         }
     }
