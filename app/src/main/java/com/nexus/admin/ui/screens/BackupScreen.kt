@@ -37,13 +37,11 @@ fun BackupScreen() {
     var backups by remember { mutableStateOf<List<BackupInfo>>(emptyList()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { refreshBackups() }
-
-    fun refreshBackups() {
-        val dir = File(context.getExternalFilesDir(null), "backups")
-        dir.mkdirs()
-        backups = dir.listFiles()?.map { BackupInfo(it.lastModified(), it.name, it.length()) }?.sortedByDescending { it.date } ?: emptyList()
-    }
+    LaunchedEffect(Unit) {
+    val dir = File(context.getExternalFilesDir(null), "backups")
+    dir.mkdirs()
+    backups = dir.listFiles()?.map { BackupInfo(it.lastModified(), it.name, it.length()) }?.sortedByDescending { it.date } ?: emptyList()
+}
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { scope.launch { exportData(context, db, it); refreshBackups() } }
