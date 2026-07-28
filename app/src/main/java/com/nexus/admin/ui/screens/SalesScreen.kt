@@ -79,19 +79,50 @@ fun SalesScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text("Ventas", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Button(onClick = { showSaleDialog = true }) { Icon(Icons.Filled.ShoppingCart, null); Spacer(Modifier.width(4.dp)); Text("Nueva Venta") }
+            Button(onClick = { showSaleDialog = true }) {
+                Icon(Icons.Filled.ShoppingCart, null)
+                Spacer(Modifier.width(4.dp))
+                Text("Nueva Venta")
+            }
         }
 
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Card(Modifier.weight(1f)) { Column(Modifier.padding(8.dp)) { Text("Ventas Hoy"); Text("$${Utils.formatCurrency(todaySales)}", fontWeight = FontWeight.Bold, color = Green) } }
-            Card(Modifier.weight(1f)) { Column(Modifier.padding(8.dp)) { Text("Trans."); Text("$transactionCount", fontWeight = FontWeight.Bold) } }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Card(Modifier.weight(1f)) {
+                Column(Modifier.padding(8.dp)) {
+                    Text("Ventas Hoy", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                    Text("$${Utils.formatCurrency(todaySales)}", fontWeight = FontWeight.Bold, color = Green)
+                }
+            }
+            Card(Modifier.weight(1f)) {
+                Column(Modifier.padding(8.dp)) {
+                    Text("Transacciones", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                    Text("$transactionCount", fontWeight = FontWeight.Bold)
+                }
+            }
         }
 
-        OutlinedTextField(filterDate, { filterDate = it }, label = { Text("Filtrar fecha (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth().padding(16.dp), singleLine = true)
+        OutlinedTextField(
+            filterDate,
+            { filterDate = it },
+            label = { Text("Filtrar fecha (YYYY-MM-DD)") },
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            singleLine = true
+        )
 
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             items(filteredSales) { sale ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
@@ -99,7 +130,10 @@ fun SalesScreen() {
                             Text(sale.client.ifEmpty { "General" }, fontWeight = FontWeight.SemiBold)
                             Text(Utils.formatDate(sale.date), style = MaterialTheme.typography.bodySmall, color = Gray500)
                         }
-                        Text(sale.products.joinToString(", ") { "${it.name} x${it.quantity}" }, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            sale.products.joinToString(", ") { "${it.name} x${it.quantity}" },
+                            style = MaterialTheme.typography.bodySmall
+                        )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("$${Utils.formatCurrency(sale.total)}", fontWeight = FontWeight.Bold, color = Green)
                             SuggestionChip(onClick = {}, label = { Text(sale.paymentMethod) })
@@ -110,13 +144,13 @@ fun SalesScreen() {
         }
     }
 
+    // New Sale Dialog
     if (showSaleDialog) {
         var client by remember { mutableStateOf("") }
         var paymentMethod by remember { mutableStateOf("Efectivo") }
         var selectedProducts by remember { mutableStateOf<MutableMap<Long, Pair<Product, Int>>>(mutableMapOf()) }
         var allProducts by remember { mutableStateOf<List<Product>>(emptyList()) }
         var showProductPicker by remember { mutableStateOf(false) }
-        var showScannerInput by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) { db.productDao().getAllProducts().collect { allProducts = it } }
 
@@ -128,78 +162,201 @@ fun SalesScreen() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(client, { client = it }, label = { Text("Cliente") }, singleLine = true)
-                    
+
                     var payExpanded by remember { mutableStateOf(false) }
                     Box {
-                        OutlinedButton(onClick = { payExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text("Pago: $paymentMethod"); Icon(Icons.Filled.ArrowDropDown, null) }
+                        OutlinedButton(onClick = { payExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Pago: $paymentMethod")
+                            Icon(Icons.Filled.ArrowDropDown, null)
+                        }
                         DropdownMenu(payExpanded, { payExpanded = false }) {
                             listOf("Efectivo", "Tarjeta", "Transferencia").forEach { m ->
-                                DropdownMenuItem(text = { Text(m) }, onClick = { paymentMethod = m; payExpanded = false })
+                                DropdownMenuItem(
+                                    text = { Text(m) },
+                                    onClick = { paymentMethod = m; payExpanded = false }
+                                )
                             }
                         }
                     }
 
+                    // Productos seleccionados
                     selectedProducts.forEach { (id, pair) ->
                         val (product, qty) = pair
                         Card(Modifier.fillMaxWidth()) {
-                            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) { Text(product.name, fontWeight = FontWeight.Medium); Text("$${Utils.formatCurrency(product.price)} | Stock: ${product.stock}") }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { if (qty > 1) selectedProducts = selectedProducts.toMutableMap().also { it[id] = product to (qty - 1) } }, modifier = Modifier.size(32.dp)) { Icon(Icons.Filled.Remove, "Menos", modifier = Modifier.size(18.dp)) }
-                                    Text("$qty", modifier = Modifier.padding(horizontal = 8.dp), fontWeight = FontWeight.Bold)
-                                    IconButton(onClick = { if (qty < product.stock) selectedProducts = selectedProducts.toMutableMap().also { it[id] = product to (qty + 1) } }, modifier = Modifier.size(32.dp)) { Icon(Icons.Filled.Add, "Más", modifier = Modifier.size(18.dp)) }
+                            Row(
+                                Modifier.fillMaxWidth().padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(product.name, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        "$${Utils.formatCurrency(product.price)} | Stock: ${product.stock}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 }
-                                Text("$${Utils.formatCurrency(product.price * qty)}", fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
-                                IconButton(onClick = { selectedProducts = selectedProducts.toMutableMap().also { it.remove(id) } }) { Icon(Icons.Filled.Delete, "Eliminar", tint = Red, modifier = Modifier.size(20.dp)) }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            if (qty > 1) {
+                                                selectedProducts = selectedProducts.toMutableMap().also {
+                                                    it[id] = product to (qty - 1)
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Remove, "Menos", modifier = Modifier.size(18.dp))
+                                    }
+                                    Text(
+                                        "$qty",
+                                        modifier = Modifier.padding(horizontal = 8.dp),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            if (qty < product.stock) {
+                                                selectedProducts = selectedProducts.toMutableMap().also {
+                                                    it[id] = product to (qty + 1)
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Add, "Más", modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                                Text(
+                                    "$${Utils.formatCurrency(product.price * qty)}",
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                                IconButton(onClick = {
+                                    selectedProducts = selectedProducts.toMutableMap().also { it.remove(id) }
+                                }) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        "Eliminar",
+                                        tint = Red,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
 
+                    // Botones Agregar y Escanear
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { showProductPicker = true }, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.Add, null); Text("Agregar") }
-                        OutlinedButton(onClick = { openScanner() }, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.QrCodeScanner, null); Text("Escanear") }
+                        OutlinedButton(
+                            onClick = { showProductPicker = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Filled.Add, null, modifier = Modifier.size(18.dp))
+                            Text("Agregar")
+                        }
+                        OutlinedButton(
+                            onClick = { openScanner() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Filled.QrCodeScanner, null, modifier = Modifier.size(18.dp))
+                            Text("Escanear")
+                        }
                     }
 
-                    Text("Total: $${Utils.formatCurrency(total)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Green)
+                    Text(
+                        "Total: $${Utils.formatCurrency(total)}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Green
+                    )
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    scope.launch {
-                        if (selectedProducts.isNotEmpty()) {
-                            val productsList = selectedProducts.values.map { (p, q) -> SaleProduct(p.id, p.name, q, p.price, p.cost) }
-                            val totalAmount = productsList.sumOf { it.price * it.quantity }
-                            val totalCost = productsList.sumOf { it.cost * it.quantity }
-                            db.saleDao().insert(Sale(client = client, products = productsList, total = totalAmount, cost = totalCost, paymentMethod = paymentMethod))
-                            selectedProducts.values.forEach { (product, qty) -> db.productDao().update(product.copy(stock = product.stock - qty)) }
-                            if (paymentMethod == "Efectivo") db.cashMovementDao().insert(CashMovement("Ingreso", totalAmount, "Venta - ${productsList.size} productos"))
-                            showSaleDialog = false
+                Button(
+                    onClick = {
+                        scope.launch {
+                            if (selectedProducts.isNotEmpty()) {
+                                val productsList = selectedProducts.values.map { (p, q) ->
+                                    SaleProduct(p.id, p.name, q, p.price, p.cost)
+                                }
+                                val totalAmount = productsList.sumOf { it.price * it.quantity }
+                                val totalCost = productsList.sumOf { it.cost * it.quantity }
+
+                                val sale = Sale(
+                                    client = client,
+                                    products = productsList,
+                                    total = totalAmount,
+                                    cost = totalCost,
+                                    paymentMethod = paymentMethod
+                                )
+                                db.saleDao().insert(sale)
+
+                                // Actualizar stock
+                                selectedProducts.values.forEach { (product, qty) ->
+                                    db.productDao().update(product.copy(stock = product.stock - qty))
+                                }
+
+                                // Registrar en caja si es efectivo
+                                if (paymentMethod == "Efectivo") {
+                                    db.cashMovementDao().insert(
+                                        CashMovement(
+                                            type = "Ingreso",
+                                            amount = totalAmount,
+                                            description = "Venta - ${productsList.size} productos",
+                                            date = System.currentTimeMillis()
+                                        )
+                                    )
+                                }
+
+                                showSaleDialog = false
+                            }
                         }
-                    }
-                }, enabled = selectedProducts.isNotEmpty()) { Text("Completar Venta") }
+                    },
+                    enabled = selectedProducts.isNotEmpty()
+                ) { Text("Completar Venta") }
             },
             dismissButton = { TextButton(onClick = { showSaleDialog = false }) { Text("Cancelar") } }
         )
 
+        // Product Picker
         if (showProductPicker) {
             var searchProd by remember { mutableStateOf("") }
             val filtered = remember(allProducts, searchProd) {
-                if (searchProd.isEmpty()) allProducts else allProducts.filter { it.name.contains(searchProd, true) || it.sku.contains(searchProd, true) }
+                if (searchProd.isEmpty()) allProducts
+                else allProducts.filter {
+                    it.name.contains(searchProd, true) || it.sku.contains(searchProd, true)
+                }
             }
             AlertDialog(
                 onDismissRequest = { showProductPicker = false },
                 title = { Text("Seleccionar Producto") },
                 text = {
                     Column {
-                        OutlinedTextField(searchProd, { searchProd = it }, label = { Text("Buscar...") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(
+                            searchProd,
+                            { searchProd = it },
+                            label = { Text("Buscar producto...") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         Spacer(Modifier.height(8.dp))
-                        LazyColumn { items(filtered) { product ->
-                            ListItem(headlineContent = { Text(product.name) }, supportingContent = { Text("Stock: ${product.stock} | $${Utils.formatCurrency(product.price)}") },
-                                modifier = Modifier.clickable {
-                                    if (product.stock > 0 && !selectedProducts.containsKey(product.id)) selectedProducts = selectedProducts.toMutableMap().also { it[product.id] = product to 1 }
-                                    showProductPicker = false
-                                })
-                        } }
+                        LazyColumn {
+                            items(filtered) { product ->
+                                ListItem(
+                                    headlineContent = { Text(product.name) },
+                                    supportingContent = {
+                                        Text("Stock: ${product.stock} | $${Utils.formatCurrency(product.price)}")
+                                    },
+                                    modifier = Modifier.clickable {
+                                        if (product.stock > 0 && !selectedProducts.containsKey(product.id)) {
+                                            selectedProducts = selectedProducts.toMutableMap().also {
+                                                it[product.id] = product to 1
+                                            }
+                                        }
+                                        showProductPicker = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 },
                 confirmButton = { TextButton(onClick = { showProductPicker = false }) { Text("Cancelar") } }
