@@ -14,13 +14,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -51,9 +48,7 @@ fun BarcodeScannerScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
-        if (!granted) {
-            onClose()
-        }
+        if (!granted) onClose()
     }
 
     LaunchedEffect(Unit) {
@@ -65,7 +60,6 @@ fun BarcodeScannerScreen(
         }
     }
 
-    // Procesar código escaneado
     LaunchedEffect(scannedBarcode) {
         scannedBarcode?.let { barcode ->
             if (isScanning) {
@@ -76,31 +70,20 @@ fun BarcodeScannerScreen(
     }
 
     if (hasCameraPermission) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-        ) {
-            // Vista de la cámara
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            // Cámara
             AndroidView(
                 factory = { ctx ->
-                    val previewView = PreviewView(ctx).apply {
-                        scaleType = PreviewView.ScaleType.FILL_CENTER
-                    }
-
+                    val previewView = PreviewView(ctx)
                     val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                     val executor = Executors.newSingleThreadExecutor()
 
                     cameraProviderFuture.addListener({
                         try {
                             val cameraProvider = cameraProviderFuture.get()
+                            val preview = Preview.Builder().build()
+                            preview.setSurfaceProvider(previewView.surfaceProvider)
 
-                            // Configurar preview
-                            val preview = Preview.Builder()
-                                .build()
-                                .also { it.surfaceProvider = previewView.surfaceProvider }
-
-                            // Configurar análisis de imagen para escanear códigos
                             val imageAnalysis = ImageAnalysis.Builder()
                                 .setTargetResolution(Size(1920, 1080))
                                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -116,7 +99,6 @@ fun BarcodeScannerScreen(
                                             mediaImage,
                                             imageProxy.imageInfo.rotationDegrees
                                         )
-
                                         barcodeScanner.process(image)
                                             .addOnSuccessListener { barcodes ->
                                                 if (barcodes.isNotEmpty() && isScanning) {
@@ -125,12 +107,7 @@ fun BarcodeScannerScreen(
                                                     }
                                                 }
                                             }
-                                            .addOnFailureListener {
-                                                // Error al escanear
-                                            }
-                                            .addOnCompleteListener {
-                                                imageProxy.close()
-                                            }
+                                            .addOnCompleteListener { imageProxy.close() }
                                     } else {
                                         imageProxy.close()
                                     }
@@ -139,7 +116,6 @@ fun BarcodeScannerScreen(
                                 }
                             }
 
-                            // Vincular cámara
                             cameraProvider.unbindAll()
                             cameraProvider.bindToLifecycle(
                                 lifecycleOwner,
@@ -157,178 +133,69 @@ fun BarcodeScannerScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Marco de escaneo animado
+            // Marco de escaneo
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 40.dp, vertical = 120.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 120.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // Esquinas del marco
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp)
-                ) {
-                    // Línea superior
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .border(4.dp, Color.White, RoundedCornerShape(topStart = 16.dp))
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .border(4.dp, Color.White, RoundedCornerShape(topEnd = 16.dp))
-                        )
+                Column(modifier = Modifier.fillMaxWidth().height(250.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Box(modifier = Modifier.size(40.dp).border(4.dp, Color.White, RoundedCornerShape(topStart = 16.dp)))
+                        Box(modifier = Modifier.size(40.dp).border(4.dp, Color.White, RoundedCornerShape(topEnd = 16.dp)))
                     }
-
                     Spacer(modifier = Modifier.weight(1f))
-
-                    // Línea inferior
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .border(4.dp, Color.White, RoundedCornerShape(bottomStart = 16.dp))
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .border(4.dp, Color.White, RoundedCornerShape(bottomEnd = 16.dp))
-                        )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Box(modifier = Modifier.size(40.dp).border(4.dp, Color.White, RoundedCornerShape(bottomStart = 16.dp)))
+                        Box(modifier = Modifier.size(40.dp).border(4.dp, Color.White, RoundedCornerShape(bottomEnd = 16.dp)))
                     }
                 }
-
-                // Línea de escaneo horizontal
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .height(2.dp)
-                        .background(Color.Green.copy(alpha = 0.8f))
-                        .align(Alignment.Center)
-                )
             }
 
-            // Texto instructivo
+            // Texto
             Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 80.dp)
-                    .fillMaxWidth(),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp).fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "Apunta la cámara al código de barras",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center
-                )
+                Text("Apunta la cámara al código de barras", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "El código se detectará automáticamente",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.Center
-                )
+                Text("El código se detectará automáticamente", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, textAlign = TextAlign.Center)
             }
 
             // Botón cerrar
             Surface(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .size(48.dp),
+                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp).size(48.dp),
                 shape = RoundedCornerShape(24.dp),
                 color = Color.Black.copy(alpha = 0.5f),
                 onClick = onClose
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Filled.Close,
-                        "Cerrar escáner",
-                        tint = Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
+                    Icon(Icons.Filled.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(28.dp))
                 }
             }
 
-            // Botón para ingresar código manualmente
+            // Botón manual
             Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
                 shape = RoundedCornerShape(24.dp),
                 color = Color.White.copy(alpha = 0.2f),
-                onClick = {
-                    isScanning = false
-                    onClose()
-                }
+                onClick = { isScanning = false; onClose() }
             ) {
-                Text(
-                    text = "Ingresar código manualmente",
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                    color = Color.White,
-                    fontWeight = FontWeight.Medium
-                )
+                Text("Ingresar código manualmente", modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp), color = Color.White, fontWeight = FontWeight.Medium)
             }
         }
     } else {
-        // Pantalla de permiso denegado
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black),
-            contentAlignment = Alignment.Center
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        Icons.Filled.Close,
-                        "Sin permiso",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Permiso de cámara requerido",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Necesitamos acceso a la cámara para escanear códigos de barras",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Otorgar permiso")
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(onClick = onClose) {
-                        Text("Cancelar")
-                    }
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            Card(modifier = Modifier.fillMaxWidth().padding(32.dp)) {
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.Close, "Sin permiso", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(16.dp))
+                    Text("Permiso de cámara requerido", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Necesitamos acceso a la cámara para escanear códigos de barras", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(24.dp))
+                    Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth()) { Text("Otorgar permiso") }
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = onClose) { Text("Cancelar") }
                 }
             }
         }
