@@ -37,46 +37,103 @@ fun BackupScreen() {
     var backups by remember { mutableStateOf<List<BackupInfo>>(emptyList()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-    val dir = File(context.getExternalFilesDir(null), "backups")
-    dir.mkdirs()
-    backups = dir.listFiles()?.map { BackupInfo(it.lastModified(), it.name, it.length()) }?.sortedByDescending { it.date } ?: emptyList()
-}
-
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        uri?.let { scope.launch { exportData(context, db, it); refreshBackups() } }
+    // Función para refrescar la lista de backups
+    fun loadBackups() {
+        val dir = File(context.getExternalFilesDir(null), "backups")
+        dir.mkdirs()
+        backups = dir.listFiles()
+            ?.map { BackupInfo(it.lastModified(), it.name, it.length()) }
+            ?.sortedByDescending { it.date }
+            ?: emptyList()
     }
 
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { scope.launch { importData(context, db, it); refreshBackups() } }
+    LaunchedEffect(Unit) {
+        loadBackups()
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                exportData(context, db, uri)
+                loadBackups()
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                importData(context, db, uri)
+                loadBackups()
+            }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Respaldos", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
-        
-        Button(onClick = { exportLauncher.launch("nexus_backup_${System.currentTimeMillis()}.json") }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.Backup, null); Spacer(Modifier.width(8.dp)); Text("Crear Respaldo")
+
+        Button(
+            onClick = {
+                exportLauncher.launch("nexus_backup_${System.currentTimeMillis()}.json")
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Filled.Backup, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Crear Respaldo")
         }
+
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.Restore, null); Spacer(Modifier.width(8.dp)); Text("Restaurar Respaldo")
+
+        OutlinedButton(
+            onClick = { importLauncher.launch(arrayOf("application/json")) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Filled.Restore, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Restaurar Respaldo")
         }
+
         Spacer(Modifier.height(8.dp))
-        Button(onClick = { showDeleteConfirm = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Red)) {
-            Icon(Icons.Filled.DeleteForever, null); Spacer(Modifier.width(8.dp)); Text("Eliminar Todo")
+
+        Button(
+            onClick = { showDeleteConfirm = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Red)
+        ) {
+            Icon(Icons.Filled.DeleteForever, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Eliminar Todos los Datos")
         }
+
         Spacer(Modifier.height(16.dp))
-        Text("Historial", fontWeight = FontWeight.SemiBold)
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(backups) { b ->
+
+        Text("Historial de Respaldos", fontWeight = FontWeight.SemiBold)
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(backups) { backup ->
                 Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(Icons.Filled.InsertDriveFile, null, tint = Blue, modifier = Modifier.size(32.dp))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(b.name, fontWeight = FontWeight.Medium)
-                            Text("${b.size / 1024} KB - ${Utils.formatDate(b.date)}", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                            Text(backup.name, fontWeight = FontWeight.Medium)
+                            Text(
+                                "${backup.size / 1024} KB - ${Utils.formatDate(backup.date)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Gray500
+                            )
                         }
                     }
                 }
@@ -84,28 +141,43 @@ fun BackupScreen() {
         }
     }
 
+    // Delete confirmation dialog
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("⚠️ Eliminar todos los datos") },
-            text = { Text("¿Está seguro? Esta acción no se puede deshacer.") },
+            text = { Text("¿Está completamente seguro? Esta acción no se puede deshacer y perderá todos los registros permanentemente.") },
             confirmButton = {
-                Button(onClick = {
-                    scope.launch {
-                        db.productDao().deleteAll(); db.saleDao().deleteAll(); db.cashMovementDao().deleteAll()
-                        db.expenseDao().deleteAll(); db.clientDao().deleteAll(); db.receivableDao().deleteAll()
-                        db.shrinkageDao().deleteAll(); db.restockDao().deleteAll(); db.supplierDao().deleteAll()
-                        db.quoteDao().deleteAll(); db.notificationDao().deleteAll()
-                        showDeleteConfirm = false
-                        Toast.makeText(context, "Datos eliminados", Toast.LENGTH_SHORT).show()
-                    }
-                }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("Eliminar") }
+                Button(
+                    onClick = {
+                        scope.launch {
+                            db.productDao().deleteAll()
+                            db.saleDao().deleteAll()
+                            db.cashMovementDao().deleteAll()
+                            db.expenseDao().deleteAll()
+                            db.clientDao().deleteAll()
+                            db.receivableDao().deleteAll()
+                            db.shrinkageDao().deleteAll()
+                            db.restockDao().deleteAll()
+                            db.supplierDao().deleteAll()
+                            db.quoteDao().deleteAll()
+                            db.notificationDao().deleteAll()
+                            showDeleteConfirm = false
+                            loadBackups()
+                            Toast.makeText(context, "✅ Todos los datos han sido eliminados", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Red)
+                ) { Text("Eliminar Todo") }
             },
-            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancelar") } }
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancelar") }
+            }
         )
     }
 }
 
+// Exportar datos a un archivo JSON
 suspend fun exportData(context: Context, db: AppDatabase, uri: android.net.Uri) {
     try {
         val data = mapOf(
@@ -122,75 +194,101 @@ suspend fun exportData(context: Context, db: AppDatabase, uri: android.net.Uri) 
         )
         val json = Gson().toJson(data)
         context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
-        val file = File(context.getExternalFilesDir(null), "backups/backup_${System.currentTimeMillis()}.json")
-        file.parentFile?.mkdirs(); file.writeText(json)
+
+        // Guardar copia local
+        val backupDir = File(context.getExternalFilesDir(null), "backups")
+        backupDir.mkdirs()
+        val backupFile = File(backupDir, "backup_${System.currentTimeMillis()}.json")
+        backupFile.writeText(json)
+
         Toast.makeText(context, "✅ Respaldo creado exitosamente", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
-        Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, "❌ Error al exportar: ${e.message}", Toast.LENGTH_LONG).show()
     }
 }
 
+// Importar datos desde un archivo JSON
 suspend fun importData(context: Context, db: AppDatabase, uri: android.net.Uri) {
     try {
-        val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() ?: return
+        val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+            ?: throw Exception("No se pudo leer el archivo")
+
         val type = object : TypeToken<Map<String, Any>>() {}.type
         val data: Map<String, Any> = Gson().fromJson(json, type)
-        
+
         // Limpiar datos existentes
-        db.productDao().deleteAll(); db.saleDao().deleteAll(); db.cashMovementDao().deleteAll()
-        db.expenseDao().deleteAll(); db.clientDao().deleteAll(); db.receivableDao().deleteAll()
-        db.shrinkageDao().deleteAll(); db.restockDao().deleteAll(); db.supplierDao().deleteAll()
+        db.productDao().deleteAll()
+        db.saleDao().deleteAll()
+        db.cashMovementDao().deleteAll()
+        db.expenseDao().deleteAll()
+        db.clientDao().deleteAll()
+        db.receivableDao().deleteAll()
+        db.shrinkageDao().deleteAll()
+        db.restockDao().deleteAll()
+        db.supplierDao().deleteAll()
         db.quoteDao().deleteAll()
 
+        val gson = Gson()
+
         // Restaurar productos
-        val productsJson = Gson().toJson(data["products"])
-        val products: List<Product> = Gson().fromJson(productsJson, object : TypeToken<List<Product>>() {}.type)
-        products.forEach { db.productDao().insert(it) }
+        (data["products"] as? List<*>)?.forEach { item ->
+            val product = gson.fromJson(gson.toJson(item), Product::class.java)
+            db.productDao().insert(product)
+        }
 
         // Restaurar ventas
-        val salesJson = Gson().toJson(data["sales"])
-        val sales: List<Sale> = Gson().fromJson(salesJson, object : TypeToken<List<Sale>>() {}.type)
-        sales.forEach { db.saleDao().insert(it) }
+        (data["sales"] as? List<*>)?.forEach { item ->
+            val sale = gson.fromJson(gson.toJson(item), Sale::class.java)
+            db.saleDao().insert(sale)
+        }
 
         // Restaurar movimientos de caja
-        val cashJson = Gson().toJson(data["cashMovements"])
-        val cashMovements: List<CashMovement> = Gson().fromJson(cashJson, object : TypeToken<List<CashMovement>>() {}.type)
-        cashMovements.forEach { db.cashMovementDao().insert(it) }
+        (data["cashMovements"] as? List<*>)?.forEach { item ->
+            val mov = gson.fromJson(gson.toJson(item), CashMovement::class.java)
+            db.cashMovementDao().insert(mov)
+        }
 
         // Restaurar gastos
-        val expensesJson = Gson().toJson(data["expenses"])
-        val expenses: List<Expense> = Gson().fromJson(expensesJson, object : TypeToken<List<Expense>>() {}.type)
-        expenses.forEach { db.expenseDao().insert(it) }
+        (data["expenses"] as? List<*>)?.forEach { item ->
+            val expense = gson.fromJson(gson.toJson(item), Expense::class.java)
+            db.expenseDao().insert(expense)
+        }
 
         // Restaurar clientes
-        val clientsJson = Gson().toJson(data["clients"])
-        val clients: List<Client> = Gson().fromJson(clientsJson, object : TypeToken<List<Client>>() {}.type)
-        clients.forEach { db.clientDao().insert(it) }
+        (data["clients"] as? List<*>)?.forEach { item ->
+            val client = gson.fromJson(gson.toJson(item), Client::class.java)
+            db.clientDao().insert(client)
+        }
 
         // Restaurar cuentas por cobrar
-        val receivablesJson = Gson().toJson(data["receivables"])
-        val receivables: List<Receivable> = Gson().fromJson(receivablesJson, object : TypeToken<List<Receivable>>() {}.type)
-        receivables.forEach { db.receivableDao().insert(it) }
+        (data["receivables"] as? List<*>)?.forEach { item ->
+            val receivable = gson.fromJson(gson.toJson(item), Receivable::class.java)
+            db.receivableDao().insert(receivable)
+        }
 
         // Restaurar mermas
-        val shrinkagesJson = Gson().toJson(data["shrinkages"])
-        val shrinkages: List<Shrinkage> = Gson().fromJson(shrinkagesJson, object : TypeToken<List<Shrinkage>>() {}.type)
-        shrinkages.forEach { db.shrinkageDao().insert(it) }
+        (data["shrinkages"] as? List<*>)?.forEach { item ->
+            val shrinkage = gson.fromJson(gson.toJson(item), Shrinkage::class.java)
+            db.shrinkageDao().insert(shrinkage)
+        }
 
         // Restaurar reabastecimientos
-        val restocksJson = Gson().toJson(data["restocks"])
-        val restocks: List<Restock> = Gson().fromJson(restocksJson, object : TypeToken<List<Restock>>() {}.type)
-        restocks.forEach { db.restockDao().insert(it) }
+        (data["restocks"] as? List<*>)?.forEach { item ->
+            val restock = gson.fromJson(gson.toJson(item), Restock::class.java)
+            db.restockDao().insert(restock)
+        }
 
         // Restaurar proveedores
-        val suppliersJson = Gson().toJson(data["suppliers"])
-        val suppliers: List<Supplier> = Gson().fromJson(suppliersJson, object : TypeToken<List<Supplier>>() {}.type)
-        suppliers.forEach { db.supplierDao().insert(it) }
+        (data["suppliers"] as? List<*>)?.forEach { item ->
+            val supplier = gson.fromJson(gson.toJson(item), Supplier::class.java)
+            db.supplierDao().insert(supplier)
+        }
 
         // Restaurar cotizaciones
-        val quotesJson = Gson().toJson(data["quotes"])
-        val quotes: List<Quote> = Gson().fromJson(quotesJson, object : TypeToken<List<Quote>>() {}.type)
-        quotes.forEach { db.quoteDao().insert(it) }
+        (data["quotes"] as? List<*>)?.forEach { item ->
+            val quote = gson.fromJson(gson.toJson(item), Quote::class.java)
+            db.quoteDao().insert(quote)
+        }
 
         Toast.makeText(context, "✅ Datos restaurados exitosamente", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
