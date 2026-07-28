@@ -25,186 +25,174 @@ fun ShrinkageScreen() {
     val context = LocalContext.current
     val db = remember { AppDatabase.getDatabase(context) }
     val scope = rememberCoroutineScope()
-    
+
     var shrinkages by remember { mutableStateOf<List<Shrinkage>>(emptyList()) }
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedType by remember { mutableStateOf("") }
-    
+
     val types = listOf(
         "Merma/Desperdicio", "Consumo Personal", "Producto Caducado",
         "Robo/Pérdida", "Error de Inventario", "Otro"
     )
-    
-    var todayLoss by remember { mutableStateOf(0.0) }
-    var monthLoss by remember { mutableStateOf(0.0) }
-    
+
+    var todayLoss by remember { mutableDoubleStateOf(0.0) }
+    var monthLoss by remember { mutableDoubleStateOf(0.0) }
+
     LaunchedEffect(Unit) {
-        db.shrinkageDao().getAllShrinkages().collect { shrinkageList ->
-            shrinkages = shrinkageList
-            
+        db.shrinkageDao().getAllShrinkages().collect { list ->
+            shrinkages = list.sortedByDescending { it.date }
             val todayStart = Utils.getTodayStart()
             val todayEnd = Utils.getTodayEnd()
             val (monthStart, monthEnd) = Utils.getMonthRange()
-            
-            todayLoss = shrinkageList.filter { it.date in todayStart..todayEnd }.sumOf { it.loss }
-            monthLoss = shrinkageList.filter { it.date in monthStart..monthEnd }.sumOf { it.loss }
+            todayLoss = list.filter { it.date in todayStart..todayEnd }.sumOf { it.loss }
+            monthLoss = list.filter { it.date in monthStart..monthEnd }.sumOf { it.loss }
         }
     }
-    
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header
+        // Header responsivo
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Mermas y Consumo", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Button(onClick = { showAddDialog = true }) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Registrar Merma")
+            Text("Mermas y Consumo", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Button(
+                onClick = { showAddDialog = true },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Filled.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Registrar", style = MaterialTheme.typography.bodySmall)
             }
         }
-        
+
         // KPIs
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Card(modifier = Modifier.weight(1f)) {
-                Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.Today, contentDescription = null, tint = Red, modifier = Modifier.size(32.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Pérdida Hoy", style = MaterialTheme.typography.bodySmall, color = Gray500)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Card(Modifier.weight(1f)) {
+                Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.Today, null, tint = Red, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.height(4.dp))
+                    Text("Hoy", style = MaterialTheme.typography.bodySmall, color = Gray500)
                     Text("$${Utils.formatCurrency(todayLoss)}", fontWeight = FontWeight.Bold, color = Red)
                 }
             }
-            Card(modifier = Modifier.weight(1f)) {
-                Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = Yellow, modifier = Modifier.size(32.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Pérdida del Mes", style = MaterialTheme.typography.bodySmall, color = Gray500)
+            Card(Modifier.weight(1f)) {
+                Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.CalendarMonth, null, tint = Yellow, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.height(4.dp))
+                    Text("Mes", style = MaterialTheme.typography.bodySmall, color = Gray500)
                     Text("$${Utils.formatCurrency(monthLoss)}", fontWeight = FontWeight.Bold, color = Yellow)
                 }
             }
         }
-        
-        // Type filter
+
+        // Filtros de tipo
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            FilterChip(
-                selected = selectedType.isEmpty(),
-                onClick = { selectedType = "" },
-                label = { Text("Todas") }
-            )
+            FilterChip(selected = selectedType.isEmpty(), onClick = { selectedType = "" }, label = { Text("Todas", style = MaterialTheme.typography.labelSmall) })
             types.forEach { type ->
                 FilterChip(
                     selected = selectedType == type,
-                    onClick = { selectedType = type },
-                    label = { Text(type) }
+                    onClick = { selectedType = if (selectedType == type) "" else type },
+                    label = { Text(type, style = MaterialTheme.typography.labelSmall) }
                 )
             }
         }
-        
-        // List
+
+        // Lista
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(shrinkages.filter { selectedType.isEmpty() || it.type == selectedType }) { shrinkage ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(shrinkage.productName, fontWeight = FontWeight.SemiBold)
+            items(shrinkages.filter { selectedType.isEmpty() || it.type == selectedType }) { s ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(s.productName, fontWeight = FontWeight.SemiBold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                SuggestionChip(
-                                    onClick = {},
-                                    label = { Text(shrinkage.type, style = MaterialTheme.typography.labelSmall) }
-                                )
-                                Text("Cant: ${shrinkage.quantity}", style = MaterialTheme.typography.bodySmall)
+                                SuggestionChip(onClick = {}, label = { Text(s.type, style = MaterialTheme.typography.labelSmall) })
+                                Text("Cant: ${s.quantity}", style = MaterialTheme.typography.bodySmall)
                             }
-                            Text(Utils.formatDate(shrinkage.date), style = MaterialTheme.typography.bodySmall, color = Gray500)
+                            Text(Utils.formatDate(s.date), style = MaterialTheme.typography.bodySmall, color = Gray500)
                         }
-                        Text(
-                            "-$${Utils.formatCurrency(shrinkage.loss)}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Red
-                        )
+                        Text("-$${Utils.formatCurrency(s.loss)}", fontWeight = FontWeight.Bold, color = Red)
                     }
                 }
             }
         }
     }
-    
+
     // Add Shrinkage Dialog
     if (showAddDialog) {
         var products by remember { mutableStateOf<List<Product>>(emptyList()) }
         var selectedProduct by remember { mutableStateOf<Product?>(null) }
         var selectedShrinkageType by remember { mutableStateOf(types[0]) }
-        var quantity by remember { mutableStateOf("") }
+        var quantity by remember { mutableStateOf("1") }
         var typeExpanded by remember { mutableStateOf(false) }
-        var productExpanded by remember { mutableStateOf(false) }
-        
-        LaunchedEffect(Unit) {
-            db.productDao().getAllProducts().collect { products = it }
-        }
-        
+        var prodExpanded by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) { db.productDao().getAllProducts().collect { products = it } }
+
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
             title = { Text("Registrar Merma") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box {
-                        OutlinedButton(onClick = { productExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text(selectedProduct?.name ?: "Seleccionar Producto")
-                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
-                        }
-                        DropdownMenu(expanded = productExpanded, onDismissRequest = { productExpanded = false }) {
-                            products.forEach { product ->
-                                DropdownMenuItem(
-                                    text = { Text("${product.name} (Stock: ${product.stock})") },
-                                    onClick = { selectedProduct = product; productExpanded = false }
-                                )
-                            }
-                        }
-                    }
-                    
-                    Box {
-                        OutlinedButton(onClick = { typeExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text(selectedShrinkageType)
-                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
-                        }
-                        DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                            types.forEach { type ->
-                                DropdownMenuItem(
-                                    text = { Text(type) },
-                                    onClick = { selectedShrinkageType = type; typeExpanded = false }
-                                )
-                            }
-                        }
-                    }
-                    
-                    OutlinedTextField(
-                        value = quantity,
-                        onValueChange = { quantity = it },
-                        label = { Text("Cantidad") },
-                        singleLine = true
-                    )
-                    
-                    selectedProduct?.let { product ->
-                        val loss = product.cost * (quantity.toIntOrNull() ?: 0)
-                        Text(
-                            "Pérdida estimada: $${Utils.formatCurrency(loss)}",
-                            color = Red,
-                            fontWeight = FontWeight.Medium
+                    // Selector de producto
+                    ExposedDropdownMenuBox(prodExpanded, { prodExpanded = it }) {
+                        OutlinedTextField(
+                            selectedProduct?.name ?: "",
+                            {},
+                            readOnly = true,
+                            label = { Text("Producto *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(prodExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            singleLine = true
                         )
+                        ExposedDropdownMenu(prodExpanded, { prodExpanded = false }) {
+                            products.forEach { p ->
+                                DropdownMenuItem(
+                                    text = { Text("${p.name} (Stock: ${p.stock})") },
+                                    onClick = { selectedProduct = p; prodExpanded = false }
+                                )
+                            }
+                        }
+                    }
+
+                    // Selector de tipo
+                    ExposedDropdownMenuBox(typeExpanded, { typeExpanded = it }) {
+                        OutlinedTextField(
+                            selectedShrinkageType,
+                            {},
+                            readOnly = true,
+                            label = { Text("Tipo *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            singleLine = true
+                        )
+                        ExposedDropdownMenu(typeExpanded, { typeExpanded = false }) {
+                            types.forEach { t ->
+                                DropdownMenuItem(text = { Text(t) }, onClick = { selectedShrinkageType = t; typeExpanded = false })
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(quantity, { quantity = it }, label = { Text("Cantidad *") }, singleLine = true)
+
+                    selectedProduct?.let { product ->
+                        val loss = product.cost * (quantity.toIntOrNull() ?: 1)
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = RedLight)) {
+                            Text(
+                                "Pérdida estimada: $${Utils.formatCurrency(loss)}",
+                                modifier = Modifier.padding(12.dp),
+                                fontWeight = FontWeight.Bold,
+                                color = Red
+                            )
+                        }
                     }
                 }
             },
@@ -212,7 +200,7 @@ fun ShrinkageScreen() {
                 Button(onClick = {
                     scope.launch {
                         selectedProduct?.let { product ->
-                            val qty = quantity.toIntOrNull() ?: 0
+                            val qty = quantity.toIntOrNull() ?: 1
                             if (qty > 0 && qty <= product.stock) {
                                 db.shrinkageDao().insert(
                                     Shrinkage(
@@ -223,7 +211,6 @@ fun ShrinkageScreen() {
                                         loss = product.cost * qty
                                     )
                                 )
-                                
                                 db.productDao().update(product.copy(stock = product.stock - qty))
                                 showAddDialog = false
                             }
@@ -231,9 +218,7 @@ fun ShrinkageScreen() {
                     }
                 }) { Text("Registrar") }
             },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancelar") } }
         )
     }
 }
