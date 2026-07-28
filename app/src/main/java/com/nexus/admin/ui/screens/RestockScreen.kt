@@ -25,165 +25,113 @@ fun RestockScreen() {
     val context = LocalContext.current
     val db = remember { AppDatabase.getDatabase(context) }
     val scope = rememberCoroutineScope()
-    
+
     var restocks by remember { mutableStateOf<List<Restock>>(emptyList()) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var monthRestocks by remember { mutableStateOf(0.0) }
-    var productsRestocked by remember { mutableStateOf(0) }
-    var restockCount by remember { mutableStateOf(0) }
-    
+    var monthRestocks by remember { mutableDoubleStateOf(0.0) }
+    var productsRestocked by remember { mutableIntStateOf(0) }
+    var restockCount by remember { mutableIntStateOf(0) }
+
     LaunchedEffect(Unit) {
-        db.restockDao().getAllRestocks().collect { restockList ->
-            restocks = restockList
-            val (monthStart, monthEnd) = Utils.getMonthRange()
-            val monthList = restockList.filter { it.date in monthStart..monthEnd }
-            monthRestocks = monthList.sumOf { it.total }
-            productsRestocked = monthList.sumOf { it.products.size }
-            restockCount = monthList.size
+        db.restockDao().getAllRestocks().collect { list ->
+            restocks = list
+            val (start, end) = Utils.getMonthRange()
+            val month = list.filter { it.date in start..end }
+            monthRestocks = month.sumOf { it.total }
+            productsRestocked = month.sumOf { it.products.size }
+            restockCount = month.size
         }
     }
-    
+
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Reabastecimiento", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Button(onClick = { showAddDialog = true }) {
-                Icon(Icons.Filled.ShoppingCart, contentDescription = null)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Nueva Compra")
-            }
+            Button(onClick = { showAddDialog = true }) { Icon(Icons.Filled.ShoppingCart, null); Spacer(Modifier.width(4.dp)); Text("Nueva Compra") }
         }
-        
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Card(modifier = Modifier.weight(1f)) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Compras Mes", style = MaterialTheme.typography.bodySmall)
-                    Text("$" + Utils.formatCurrency(monthRestocks), fontWeight = FontWeight.Bold, color = Blue)
-                }
-            }
-            Card(modifier = Modifier.weight(1f)) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Productos", style = MaterialTheme.typography.bodySmall)
-                    Text("$productsRestocked", fontWeight = FontWeight.Bold)
-                }
-            }
-            Card(modifier = Modifier.weight(1f)) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Compras", style = MaterialTheme.typography.bodySmall)
-                    Text("$restockCount", fontWeight = FontWeight.Bold)
-                }
-            }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Card(Modifier.weight(1f)) { Column(Modifier.padding(12.dp)) { Text("Compras Mes"); Text("$${Utils.formatCurrency(monthRestocks)}", fontWeight = FontWeight.Bold, color = Blue) } }
+            Card(Modifier.weight(1f)) { Column(Modifier.padding(12.dp)) { Text("Productos"); Text("$productsRestocked", fontWeight = FontWeight.Bold) } }
+            Card(Modifier.weight(1f)) { Column(Modifier.padding(12.dp)) { Text("Compras"); Text("$restockCount", fontWeight = FontWeight.Bold) } }
         }
-        
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(restocks) { restock ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(restock.supplier, fontWeight = FontWeight.SemiBold)
-                            Text(Utils.formatDate(restock.date), style = MaterialTheme.typography.bodySmall)
-                        }
-                        Text(
-                            restock.products.joinToString(", ") { it.name + " x" + it.quantity },
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Total:")
-                            Text("$" + Utils.formatCurrency(restock.total), fontWeight = FontWeight.Bold, color = Green)
-                        }
+        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(restocks) { r ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(r.supplier, fontWeight = FontWeight.SemiBold)
+                        Text(r.products.joinToString(", ") { "${it.name} x${it.quantity}" }, style = MaterialTheme.typography.bodySmall)
+                        Text("Total: $${Utils.formatCurrency(r.total)}", fontWeight = FontWeight.Bold, color = Green)
                     }
                 }
             }
         }
     }
-    
+
     if (showAddDialog) {
         var supplier by remember { mutableStateOf("") }
-        var selectedProducts by remember { mutableStateOf<List<Pair<Product, Int>>>(emptyList()) }
+        var selectedProducts by remember { mutableStateOf<MutableMap<Long, Pair<Product, Int>>>(mutableMapOf()) }
         var allProducts by remember { mutableStateOf<List<Product>>(emptyList()) }
         var showProductPicker by remember { mutableStateOf(false) }
-        
-        LaunchedEffect(Unit) {
-            db.productDao().getAllProducts().collect { allProducts = it }
-        }
-        
+
+        LaunchedEffect(Unit) { db.productDao().getAllProducts().collect { allProducts = it } }
+
+        val total = selectedProducts.values.sumOf { (p, q) -> p.cost * q }
+
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
             title = { Text("Nuevo Reabastecimiento") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = supplier,
-                        onValueChange = { supplier = it },
-                        label = { Text("Proveedor") },
-                        singleLine = true
-                    )
-                    
-                    OutlinedButton(
-                        onClick = { showProductPicker = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Text("Agregar Producto")
-                    }
-                    
-                    selectedProducts.forEachIndexed { index, (product, qty) ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(product.name, fontWeight = FontWeight.Medium)
-                                Text("Costo: $" + Utils.formatCurrency(product.cost) + " x $qty")
-                            }
-                            IconButton(onClick = {
-                                selectedProducts = selectedProducts.toMutableList().also { it.removeAt(index) }
-                            }) {
-                                Icon(Icons.Filled.RemoveCircle, contentDescription = "Eliminar", tint = Red)
+                    OutlinedTextField(supplier, { supplier = it }, label = { Text("Proveedor") }, singleLine = true)
+
+                    selectedProducts.forEach { (id, pair) ->
+                        val (product, qty) = pair
+                        Card(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(product.name, fontWeight = FontWeight.Medium)
+                                    Text("Costo: $${Utils.formatCurrency(product.cost)}", style = MaterialTheme.typography.bodySmall)
+                                }
+                                // Cantidad manual
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { if (qty > 1) selectedProducts = selectedProducts.toMutableMap().also { it[id] = product to (qty - 1) } }, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.Filled.Remove, "Menos", modifier = Modifier.size(18.dp))
+                                    }
+                                    Text("$qty", modifier = Modifier.padding(horizontal = 8.dp), fontWeight = FontWeight.Bold)
+                                    IconButton(onClick = { selectedProducts = selectedProducts.toMutableMap().also { it[id] = product to (qty + 1) } }, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.Filled.Add, "Más", modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                                Text("$${Utils.formatCurrency(product.cost * qty)}", fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
+                                IconButton(onClick = { selectedProducts = selectedProducts.toMutableMap().also { it.remove(id) } }) {
+                                    Icon(Icons.Filled.Delete, "Eliminar", tint = Red, modifier = Modifier.size(20.dp))
+                                }
                             }
                         }
                     }
-                    
-                    val total = selectedProducts.sumOf { it.first.cost * it.second }
-                    Text(
-                        "Total: $" + Utils.formatCurrency(total),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Green
-                    )
+
+                    OutlinedButton(onClick = { showProductPicker = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Add, null); Text("Agregar Producto")
+                    }
+
+                    Text("Total: $${Utils.formatCurrency(total)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Green)
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
-                        val total = selectedProducts.sumOf { it.first.cost * it.second }
-                        val restock = Restock(
-                            supplier = supplier,
-                            products = selectedProducts.map { (product, qty) ->
-                                RestockProduct(product.id, product.name, qty, product.cost)
-                            },
-                            total = total
-                        )
-                        db.restockDao().insert(restock)
-                        selectedProducts.forEach { (product, qty) ->
-                            db.productDao().update(product.copy(stock = product.stock + qty))
+                        if (selectedProducts.isNotEmpty() && supplier.isNotBlank()) {
+                            val list = selectedProducts.values.map { (p, q) -> RestockProduct(p.id, p.name, q, p.cost) }
+                            val t = list.sumOf { it.cost * it.quantity }
+                            db.restockDao().insert(Restock(supplier = supplier, products = list, total = t))
+                            selectedProducts.forEach { (_, pair) -> db.productDao().update(pair.first.copy(stock = pair.first.stock + pair.second)) }
+                            showAddDialog = false
                         }
-                        showAddDialog = false
                     }
-                }) { Text("Registrar Compra") }
+                }, enabled = selectedProducts.isNotEmpty()) { Text("Registrar") }
             },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancelar") } }
         )
-        
+
         if (showProductPicker) {
             AlertDialog(
                 onDismissRequest = { showProductPicker = false },
@@ -193,18 +141,18 @@ fun RestockScreen() {
                         items(allProducts) { product ->
                             ListItem(
                                 headlineContent = { Text(product.name) },
-                                supportingContent = { Text("Stock: " + product.stock + " | Costo: $" + Utils.formatCurrency(product.cost)) },
+                                supportingContent = { Text("Stock: ${product.stock} | Costo: $${Utils.formatCurrency(product.cost)}") },
                                 modifier = Modifier.clickable {
-                                    selectedProducts = selectedProducts + (product to 1)
+                                    if (!selectedProducts.containsKey(product.id)) {
+                                        selectedProducts = selectedProducts.toMutableMap().also { it[product.id] = product to 1 }
+                                    }
                                     showProductPicker = false
                                 }
                             )
                         }
                     }
                 },
-                confirmButton = {
-                    TextButton(onClick = { showProductPicker = false }) { Text("Cancelar") }
-                }
+                confirmButton = { TextButton(onClick = { showProductPicker = false }) { Text("Cancelar") } }
             )
         }
     }
