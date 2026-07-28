@@ -1,6 +1,5 @@
 package com.nexus.admin.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -41,35 +40,40 @@ fun SuppliersScreen() {
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text("Proveedores", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+        
         TabRow(selectedTabIndex = selectedTab) {
             Tab(selectedTab == 0, { selectedTab = 0 }, text = { Text("Proveedores") })
-            Tab(selectedTab == 1, { selectedTab = 1 }, text = { Text("Productos por Proveedor") })
+            Tab(selectedTab == 1, { selectedTab = 1 }, text = { Text("Productos") })
             Tab(selectedTab == 2, { selectedTab = 2 }, text = { Text("Análisis") })
         }
 
         when (selectedTab) {
-            0 -> SuppliersTab(suppliers, onAdd = { showAddSupplier = true })
-            1 -> QuotesTab(quotes, products, suppliers, onAdd = { showAddQuote = true })
-            2 -> AnalysisTab(quotes, products, suppliers)
+            0 -> SuppliersListTab(suppliers, onAdd = { showAddSupplier = true })
+            1 -> QuotesListTab(quotes, products, onAdd = { showAddQuote = true })
+            2 -> AnalysisTab(quotes, products)
         }
     }
 
     // Add Supplier Dialog
     if (showAddSupplier) {
-        var name by remember { mutableStateOf("") }; var company by remember { mutableStateOf("") }
-        var phone by remember { mutableStateOf("") }; var email by remember { mutableStateOf("") }
-        var delivery by remember { mutableStateOf("") }; var terms by remember { mutableStateOf("") }
+        var name by remember { mutableStateOf("") }
+        var company by remember { mutableStateOf("") }
+        var phone by remember { mutableStateOf("") }
+        var email by remember { mutableStateOf("") }
+        var delivery by remember { mutableStateOf("") }
+        var terms by remember { mutableStateOf("") }
+
         AlertDialog(
             onDismissRequest = { showAddSupplier = false },
             title = { Text("Nuevo Proveedor") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("Nombre *") })
-                    OutlinedTextField(company, { company = it }, label = { Text("Empresa") })
-                    OutlinedTextField(phone, { phone = it }, label = { Text("Teléfono") })
-                    OutlinedTextField(email, { email = it }, label = { Text("Email") })
-                    OutlinedTextField(delivery, { delivery = it }, label = { Text("Tiempo entrega") })
-                    OutlinedTextField(terms, { terms = it }, label = { Text("Cond. pago") })
+                    OutlinedTextField(name, { name = it }, label = { Text("Nombre *") }, singleLine = true)
+                    OutlinedTextField(company, { company = it }, label = { Text("Empresa") }, singleLine = true)
+                    OutlinedTextField(phone, { phone = it }, label = { Text("Teléfono") }, singleLine = true)
+                    OutlinedTextField(email, { email = it }, label = { Text("Email") }, singleLine = true)
+                    OutlinedTextField(delivery, { delivery = it }, label = { Text("Tiempo de entrega") }, singleLine = true)
+                    OutlinedTextField(terms, { terms = it }, label = { Text("Condiciones de pago") }, singleLine = true)
                 }
             },
             confirmButton = {
@@ -86,7 +90,7 @@ fun SuppliersScreen() {
         )
     }
 
-    // Add Quote Dialog - AHORA BASADO EN PRODUCTOS
+    // Add Quote Dialog
     if (showAddQuote) {
         var selectedProduct by remember { mutableStateOf<Product?>(null) }
         var selectedSupplier by remember { mutableStateOf<Supplier?>(null) }
@@ -103,7 +107,7 @@ fun SuppliersScreen() {
             title = { Text("Agregar Producto a Proveedor") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Seleccionar producto
+                    // Selector de producto
                     ExposedDropdownMenuBox(prodExpanded, { prodExpanded = it }) {
                         OutlinedTextField(
                             selectedProduct?.name ?: "",
@@ -111,15 +115,24 @@ fun SuppliersScreen() {
                             readOnly = true,
                             label = { Text("Producto *") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(prodExpanded) },
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            singleLine = true
                         )
                         ExposedDropdownMenu(prodExpanded, { prodExpanded = false }) {
-                            products.forEach { p ->
-                                DropdownMenuItem(text = { Text("${p.name} (Costo: $${Utils.formatCurrency(p.cost)})") }, onClick = { selectedProduct = p; prodExpanded = false })
+                            if (products.isEmpty()) {
+                                DropdownMenuItem(text = { Text("No hay productos") }, onClick = { prodExpanded = false })
+                            } else {
+                                products.forEach { p ->
+                                    DropdownMenuItem(
+                                        text = { Text("${p.name} (Costo: $${Utils.formatCurrency(p.cost)})") },
+                                        onClick = { selectedProduct = p; prodExpanded = false }
+                                    )
+                                }
                             }
                         }
                     }
-                    // Seleccionar proveedor
+
+                    // Selector de proveedor
                     ExposedDropdownMenuBox(suppExpanded, { suppExpanded = it }) {
                         OutlinedTextField(
                             selectedSupplier?.name ?: "",
@@ -127,36 +140,50 @@ fun SuppliersScreen() {
                             readOnly = true,
                             label = { Text("Proveedor *") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(suppExpanded) },
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            singleLine = true
                         )
                         ExposedDropdownMenu(suppExpanded, { suppExpanded = false }) {
-                            suppliers.forEach { s ->
-                                DropdownMenuItem(text = { Text(s.name) }, onClick = { selectedSupplier = s; suppExpanded = false })
+                            if (suppliers.isEmpty()) {
+                                DropdownMenuItem(text = { Text("No hay proveedores") }, onClick = { suppExpanded = false })
+                            } else {
+                                suppliers.forEach { s ->
+                                    DropdownMenuItem(
+                                        text = { Text(s.name) },
+                                        onClick = { selectedSupplier = s; suppExpanded = false }
+                                    )
+                                }
                             }
                         }
                     }
-                    OutlinedTextField(qPrice, { qPrice = it }, label = { Text("Precio cotizado *") }, leadingIcon = { Text("$") })
+
+                    OutlinedTextField(qPrice, { qPrice = it }, label = { Text("Precio cotizado *") }, leadingIcon = { Text("$") }, singleLine = true)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(qMin, { qMin = it }, label = { Text("Cant. mín") }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(qDays, { qDays = it }, label = { Text("Días entrega") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(qMin, { qMin = it }, label = { Text("Cant. mín") }, modifier = Modifier.weight(1f), singleLine = true)
+                        OutlinedTextField(qDays, { qDays = it }, label = { Text("Días") }, modifier = Modifier.weight(1f), singleLine = true)
                     }
-                    OutlinedTextField(qTerms, { qTerms = it }, label = { Text("Cond. pago") })
-                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(qShipping, { qShipping = it }); Text("Incluye envío") }
+                    OutlinedTextField(qTerms, { qTerms = it }, label = { Text("Condiciones") }, singleLine = true)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(qShipping, { qShipping = it })
+                        Text("¿Incluye envío?")
+                    }
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
                         if (selectedProduct != null && selectedSupplier != null && qPrice.isNotBlank()) {
-                            db.quoteDao().insert(Quote(
-                                productId = selectedProduct!!.id,
-                                supplier = selectedSupplier!!.name,
-                                price = qPrice.toDoubleOrNull() ?: 0.0,
-                                minQuantity = qMin.toIntOrNull() ?: 1,
-                                deliveryDays = qDays.toIntOrNull() ?: 0,
-                                paymentTerms = qTerms,
-                                includesShipping = qShipping
-                            ))
+                            db.quoteDao().insert(
+                                Quote(
+                                    productId = selectedProduct!!.id,
+                                    supplier = selectedSupplier!!.name,
+                                    price = qPrice.toDoubleOrNull() ?: 0.0,
+                                    minQuantity = qMin.toIntOrNull() ?: 1,
+                                    deliveryDays = qDays.toIntOrNull() ?: 0,
+                                    paymentTerms = qTerms,
+                                    includesShipping = qShipping
+                                )
+                            )
                             showAddQuote = false
                         }
                     }
@@ -168,10 +195,12 @@ fun SuppliersScreen() {
 }
 
 @Composable
-fun SuppliersTab(suppliers: List<Supplier>, onAdd: () -> Unit) {
+fun SuppliersListTab(suppliers: List<Supplier>, onAdd: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
-            Button(onClick = onAdd) { Text("+ Proveedor") }
+            Button(onClick = onAdd, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                Text("+ Proveedor", style = MaterialTheme.typography.bodySmall)
+            }
         }
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(suppliers) { s ->
@@ -181,6 +210,7 @@ fun SuppliersTab(suppliers: List<Supplier>, onAdd: () -> Unit) {
                         if (s.company.isNotEmpty()) Text(s.company, style = MaterialTheme.typography.bodySmall)
                         if (s.phone.isNotEmpty()) Text("📞 ${s.phone}", style = MaterialTheme.typography.bodySmall)
                         if (s.email.isNotEmpty()) Text("✉️ ${s.email}", style = MaterialTheme.typography.bodySmall)
+                        if (s.deliveryTime.isNotEmpty()) Text("⏱️ ${s.deliveryTime}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -189,14 +219,15 @@ fun SuppliersTab(suppliers: List<Supplier>, onAdd: () -> Unit) {
 }
 
 @Composable
-fun QuotesTab(quotes: List<Quote>, products: List<Product>, suppliers: List<Supplier>, onAdd: () -> Unit) {
+fun QuotesListTab(quotes: List<Quote>, products: List<Product>, onAdd: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
-            Button(onClick = onAdd) { Text("+ Producto") }
+            Button(onClick = onAdd, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                Text("+ Producto", style = MaterialTheme.typography.bodySmall)
+            }
         }
+        val grouped = quotes.groupBy { it.supplier }
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Agrupar por proveedor
-            val grouped = quotes.groupBy { it.supplier }
             items(grouped.entries.toList()) { (supplier, supplierQuotes) ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
@@ -205,10 +236,9 @@ fun QuotesTab(quotes: List<Quote>, products: List<Product>, suppliers: List<Supp
                         supplierQuotes.forEach { q ->
                             val p = products.find { it.id == q.productId }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(p?.name ?: "Producto #${q.productId}", style = MaterialTheme.typography.bodySmall)
+                                Text(p?.name ?: "Producto", style = MaterialTheme.typography.bodySmall)
                                 Text("$${Utils.formatCurrency(q.price)}", fontWeight = FontWeight.Medium, color = Green)
                             }
-                            Text("Mín: ${q.minQuantity} | Entrega: ${q.deliveryDays} días", style = MaterialTheme.typography.labelSmall, color = Gray500)
                         }
                     }
                 }
@@ -218,7 +248,7 @@ fun QuotesTab(quotes: List<Quote>, products: List<Product>, suppliers: List<Supp
 }
 
 @Composable
-fun AnalysisTab(quotes: List<Quote>, products: List<Product>, suppliers: List<Supplier>) {
+fun AnalysisTab(quotes: List<Quote>, products: List<Product>) {
     val grouped = quotes.groupBy { it.productId }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         items(grouped.entries.toList()) { (productId, productQuotes) ->
@@ -230,7 +260,6 @@ fun AnalysisTab(quotes: List<Quote>, products: List<Product>, suppliers: List<Su
                 Column(Modifier.padding(16.dp)) {
                     Text(product.name, fontWeight = FontWeight.Bold)
                     Text("Costo actual: $${Utils.formatCurrency(product.cost)}", color = Gray500)
-                    Text("Precio venta: $${Utils.formatCurrency(product.price)}", color = Gray500)
                     Spacer(Modifier.height(8.dp))
                     Text("Cotizaciones:", fontWeight = FontWeight.SemiBold)
                     productQuotes.forEach { q ->
@@ -242,11 +271,10 @@ fun AnalysisTab(quotes: List<Quote>, products: List<Product>, suppliers: List<Su
                             Column(Modifier.padding(8.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(q.supplier, fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal)
-                                    if (isBest) Text("🏆 Mejor opción", color = GreenDark, style = MaterialTheme.typography.labelSmall)
+                                    if (isBest) Text("🏆 Mejor", color = GreenDark, style = MaterialTheme.typography.labelSmall)
                                 }
-                                Text("Precio: $${Utils.formatCurrency(q.price)}", color = Green, fontWeight = FontWeight.Medium)
-                                Text("Mín: ${q.minQuantity} | Entrega: ${q.deliveryDays} días | Envío: ${if (q.includesShipping) "Sí" else "No"}", style = MaterialTheme.typography.bodySmall)
-                                if (!q.paymentTerms.isNullOrEmpty()) Text("Condiciones: ${q.paymentTerms}", style = MaterialTheme.typography.bodySmall)
+                                Text("$${Utils.formatCurrency(q.price)}", color = Green, fontWeight = FontWeight.Medium)
+                                Text("Mín: ${q.minQuantity} | ${q.deliveryDays} días | Envío: ${if (q.includesShipping) "Sí" else "No"}", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -254,9 +282,8 @@ fun AnalysisTab(quotes: List<Quote>, products: List<Product>, suppliers: List<Su
                         Spacer(Modifier.height(8.dp))
                         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = GreenLight)) {
                             Column(Modifier.padding(12.dp)) {
-                                Text("💰 Ahorro potencial: $${Utils.formatCurrency(savings)} por unidad", fontWeight = FontWeight.Bold, color = GreenDark)
-                                val margin = product.price - (best?.price ?: product.cost)
-                                Text("📈 Margen estimado: $${Utils.formatCurrency(margin)} (${Utils.formatCurrency((margin / product.price) * 100)}%)", color = GreenDark)
+                                Text("💰 Ahorro: $${Utils.formatCurrency(savings)}/unidad", fontWeight = FontWeight.Bold, color = GreenDark)
+                                Text("📈 Margen: $${Utils.formatCurrency(product.price - (best?.price ?: product.cost))}", color = GreenDark)
                             }
                         }
                     }
