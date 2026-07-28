@@ -525,49 +525,38 @@ fun SalesScreen() {
                                 val isAlreadyAdded = selectedProducts.containsKey(product.id)
 
                                 ListItem(
-                                    headlineContent = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(product.name)
-                                            if (isOutOfStock) {
-                                                Spacer(Modifier.width(8.dp))
-                                                SuggestionChip(
-                                                    onClick = {},
-                                                    label = { Text("Agotado") }
-                                                )
-                                            }
-                                            if (isAlreadyAdded) {
-                                                Spacer(Modifier.width(8.dp))
-                                                SuggestionChip(
-                                                    onClick = {},
-                                                    label = { Text("Agregado") }
-                                                )
-                                            }
-                                        }
-                                    },
-                                    supportingContent = {
-                                        Text(
-                                            "Stock: ${product.stock} | Precio: $${Utils.formatCurrency(product.price)}"
-                                        )
-                                    },
-                                    modifier = Modifier.clickable {
-                                        if (!isOutOfStock && !isAlreadyAdded) {
-                                            selectedProducts = selectedProducts.toMutableMap().also {
-                                                it[product.id] = product to 1
-                                            }
-                                            showProductPicker = false
-                                        }
-                                    },
-                                    enabled = !isOutOfStock && !isAlreadyAdded
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showProductPicker = false }) {
-                        Text("Listo")
-                    }
-                }
+    headlineContent = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(product.name)
+            if (isOutOfStock) {
+                Spacer(Modifier.width(8.dp))
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text("Agotado") }
+                )
+            }
+            if (isAlreadyAdded) {
+                Spacer(Modifier.width(8.dp))
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text("Agregado") }
+                )
+            }
+        }
+    },
+    supportingContent = {
+        Text("Stock: ${product.stock} | Precio: $${Utils.formatCurrency(product.price)}")
+    },
+    modifier = Modifier.clickable {
+        if (!isOutOfStock && !isAlreadyAdded) {
+            selectedProducts = selectedProducts.toMutableMap().also {
+                it[product.id] = product to 1
+            }
+            showProductPicker = false
+        }
+    }
+)
+                               
             )
         }
     }
