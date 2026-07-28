@@ -267,8 +267,14 @@ fun ReceivablesScreen() {
                                 payments = receivable.payments + Payment(amount = amt, date = System.currentTimeMillis(), method = payMethod)
                             ))
                             if (payMethod == "Efectivo") {
-                                db.cashMovementDao().insert(CashMovement("Ingreso", amt, "Abono: ${receivable.clientName}"))
-                            }
+                                db.cashMovementDao().insert(
+    CashMovement(
+        type = "Ingreso",
+        amount = amt,
+        description = "Abono: ${receivable.clientName}",
+        date = System.currentTimeMillis()
+    )
+)
                             showPayment = null
                         }
                     }
