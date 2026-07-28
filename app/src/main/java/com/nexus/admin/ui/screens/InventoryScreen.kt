@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nexus.admin.data.AppDatabase
 import com.nexus.admin.data.entity.Product
-import com.nexus.admin.ui.components.BarcodeScannerScreen
+import com.nexus.admin.ui.components.FloatingBarcodeScanner
 import com.nexus.admin.ui.theme.*
 import com.nexus.admin.utils.Utils
 import kotlinx.coroutines.launch
@@ -46,6 +46,7 @@ fun InventoryScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // Header
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -53,7 +54,7 @@ fun InventoryScreen() {
         ) {
             Text("Inventario", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Button(onClick = { showAddDialog = true }) {
-                Icon(Icons.Filled.Add, null)
+                Icon(Icons.Filled.Add, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Nuevo")
             }
@@ -86,24 +87,57 @@ fun InventoryScreen() {
                 modifier = Modifier.size(56.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = Blue)
             ) {
-                Icon(Icons.Filled.QrCodeScanner, "Escanear con cámara", tint = White, modifier = Modifier.size(28.dp))
+                Icon(
+                    Icons.Filled.QrCodeScanner,
+                    "Escanear con cámara",
+                    tint = White,
+                    modifier = Modifier.size(28.dp)
+                )
             }
         }
 
         Spacer(Modifier.height(8.dp))
 
+        // Lista de productos
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (filteredProducts.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Filled.Inventory,
+                                null,
+                                modifier = Modifier.size(64.dp),
+                                tint = Gray300
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                if (searchQuery.isNotEmpty()) "No se encontraron productos"
+                                else "No hay productos registrados",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Gray500
+                            )
+                        }
+                    }
+                }
+            }
             items(filteredProducts) { product ->
                 val bgColor = when {
                     product.stock == 0 -> RedLight
                     product.stock <= product.minStock -> YellowLight
                     else -> MaterialTheme.colorScheme.surface
                 }
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = bgColor)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = bgColor)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -111,18 +145,50 @@ fun InventoryScreen() {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(product.name, fontWeight = FontWeight.SemiBold)
-                            Text("SKU: ${product.sku.ifEmpty { "N/A" }}", style = MaterialTheme.typography.bodySmall)
-                            Text("Stock: ${product.stock} | $${Utils.formatCurrency(product.price)}", style = MaterialTheme.typography.bodySmall)
-                            if (product.stock <= product.minStock && product.stock > 0)
-                                Text("⚠️ Stock bajo", color = Yellow, style = MaterialTheme.typography.labelSmall)
-                            if (product.stock == 0)
-                                Text("❌ Agotado", color = Red, style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                "SKU: ${product.sku.ifEmpty { "N/A" }}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                "Stock: ${product.stock} | Precio: $${Utils.formatCurrency(product.price)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Gray500
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (product.stock <= product.minStock && product.stock > 0) {
+                                    Text(
+                                        "⚠️ Stock bajo",
+                                        color = Yellow,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                                if (product.stock == 0) {
+                                    Text(
+                                        "❌ Agotado",
+                                        color = Red,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                            Text(
+                                "Ganancia: $${Utils.formatCurrency(product.price - product.cost)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Green
+                            )
                         }
                         Row {
-                            IconButton(onClick = { editingProduct = product; showAddDialog = true }) {
+                            IconButton(onClick = {
+                                editingProduct = product
+                                showAddDialog = true
+                            }) {
                                 Icon(Icons.Filled.Edit, "Editar", tint = Blue)
                             }
-                            IconButton(onClick = { scope.launch { db.productDao().delete(product) } }) {
+                            IconButton(onClick = {
+                                scope.launch {
+                                    db.productDao().delete(product)
+                                    Toast.makeText(context, "Producto eliminado", Toast.LENGTH_SHORT).show()
+                                }
+                            }) {
                                 Icon(Icons.Filled.Delete, "Eliminar", tint = Red)
                             }
                         }
@@ -132,15 +198,15 @@ fun InventoryScreen() {
         }
     }
 
-    // Pantalla de escáner
+    // Escáner flotante
     if (showScanner) {
-        BarcodeScannerScreen(
+        FloatingBarcodeScanner(
             onBarcodeScanned = { barcode ->
                 searchQuery = barcode
                 showScanner = false
-                Toast.makeText(context, "Código escaneado: $barcode", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "🔍 Código escaneado: $barcode", Toast.LENGTH_SHORT).show()
             },
-            onClose = { showScanner = false }
+            onDismiss = { showScanner = false }
         )
     }
 
@@ -156,35 +222,114 @@ fun InventoryScreen() {
         var showSkuScanner by remember { mutableStateOf(false) }
 
         AlertDialog(
-            onDismissRequest = { showAddDialog = false; editingProduct = null },
-            title = { Text(if (editingProduct != null) "Editar Producto" else "Nuevo Producto") },
+            onDismissRequest = {
+                showAddDialog = false
+                editingProduct = null
+            },
+            title = {
+                Text(if (editingProduct != null) "Editar Producto" else "Nuevo Producto")
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("Nombre *") }, singleLine = true)
+                    OutlinedTextField(
+                        name,
+                        { name = it },
+                        label = { Text("Nombre *") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     
                     // SKU con botón de escanear
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         OutlinedTextField(
-                            sku, { sku = it },
+                            sku,
+                            { sku = it },
                             label = { Text("SKU/Código") },
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
-                        IconButton(onClick = { showSkuScanner = true }) {
-                            Icon(Icons.Filled.QrCodeScanner, "Escanear SKU", tint = Blue)
+                        FilledIconButton(
+                            onClick = { showSkuScanner = true },
+                            modifier = Modifier.size(48.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = Blue)
+                        ) {
+                            Icon(
+                                Icons.Filled.QrCodeScanner,
+                                "Escanear SKU",
+                                tint = White,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                     
-                    OutlinedTextField(category, { category = it }, label = { Text("Categoría") }, singleLine = true)
+                    OutlinedTextField(
+                        category,
+                        { category = it },
+                        label = { Text("Categoría") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(cost, { cost = it }, label = { Text("Costo") }, modifier = Modifier.weight(1f), singleLine = true)
-                        OutlinedTextField(price, { price = it }, label = { Text("Precio") }, modifier = Modifier.weight(1f), singleLine = true)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            cost,
+                            { cost = it },
+                            label = { Text("Costo") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            leadingIcon = { Text("$") }
+                        )
+                        OutlinedTextField(
+                            price,
+                            { price = it },
+                            label = { Text("Precio") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            leadingIcon = { Text("$") }
+                        )
                     }
                     
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(stock, { stock = it }, label = { Text("Stock") }, modifier = Modifier.weight(1f), singleLine = true)
-                        OutlinedTextField(minStock, { minStock = it }, label = { Text("Stock Mín") }, modifier = Modifier.weight(1f), singleLine = true)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            stock,
+                            { stock = it },
+                            label = { Text("Stock") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            minStock,
+                            { minStock = it },
+                            label = { Text("Stock Mín") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
+
+                    // Vista previa de ganancia
+                    val c = cost.toDoubleOrNull() ?: 0.0
+                    val p = price.toDoubleOrNull() ?: 0.0
+                    if (p > c) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = GreenLight)
+                        ) {
+                            Text(
+                                "Ganancia por unidad: $${Utils.formatCurrency(p - c)}",
+                                modifier = Modifier.padding(12.dp),
+                                fontWeight = FontWeight.Bold,
+                                color = GreenDark
+                            )
+                        }
                     }
                 }
             },
@@ -193,28 +338,46 @@ fun InventoryScreen() {
                     scope.launch {
                         val p = Product(
                             id = editingProduct?.id ?: 0,
-                            name = name, sku = sku, category = category,
+                            name = name,
+                            sku = sku,
+                            category = category,
                             cost = cost.toDoubleOrNull() ?: 0.0,
                             price = price.toDoubleOrNull() ?: 0.0,
                             stock = stock.toIntOrNull() ?: 0,
                             minStock = minStock.toIntOrNull() ?: 5
                         )
-                        if (editingProduct != null) db.productDao().update(p) else db.productDao().insert(p)
-                        showAddDialog = false; editingProduct = null
+                        if (editingProduct != null) {
+                            db.productDao().update(p)
+                            Toast.makeText(context, "Producto actualizado", Toast.LENGTH_SHORT).show()
+                        } else {
+                            db.productDao().insert(p)
+                            Toast.makeText(context, "Producto creado", Toast.LENGTH_SHORT).show()
+                        }
+                        showAddDialog = false
+                        editingProduct = null
                     }
-                }) { Text("Guardar") }
+                }) {
+                    Text("Guardar")
+                }
             },
-            dismissButton = { TextButton(onClick = { showAddDialog = false; editingProduct = null }) { Text("Cancelar") } }
+            dismissButton = {
+                TextButton(onClick = {
+                    showAddDialog = false
+                    editingProduct = null
+                }) {
+                    Text("Cancelar")
+                }
+            }
         )
 
-        // Escáner para SKU en el diálogo
+        // Escáner para SKU
         if (showSkuScanner) {
-            BarcodeScannerScreen(
+            FloatingBarcodeScanner(
                 onBarcodeScanned = { barcode ->
                     sku = barcode
                     showSkuScanner = false
                 },
-                onClose = { showSkuScanner = false }
+                onDismiss = { showSkuScanner = false }
             )
         }
     }
