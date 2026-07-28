@@ -40,91 +40,17 @@ fun SuppliersScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Text("Proveedores y Cotizaciones", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+        Text("Proveedores", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
         TabRow(selectedTabIndex = selectedTab) {
             Tab(selectedTab == 0, { selectedTab = 0 }, text = { Text("Proveedores") })
-            Tab(selectedTab == 1, { selectedTab = 1 }, text = { Text("Cotizaciones") })
+            Tab(selectedTab == 1, { selectedTab = 1 }, text = { Text("Productos por Proveedor") })
             Tab(selectedTab == 2, { selectedTab = 2 }, text = { Text("Análisis") })
         }
 
         when (selectedTab) {
-            0 -> {
-                // Suppliers tab
-                Column(Modifier.fillMaxSize()) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
-                        Button(onClick = { showAddSupplier = true }) { Text("+ Proveedor") }
-                    }
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(suppliers) { s ->
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text(s.name, fontWeight = FontWeight.SemiBold)
-                                    if (s.company.isNotEmpty()) Text(s.company, style = MaterialTheme.typography.bodySmall)
-                                    if (s.phone.isNotEmpty()) Text("📞 ${s.phone}", style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            1 -> {
-                // Quotes tab
-                Column(Modifier.fillMaxSize()) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
-                        Button(onClick = { showAddQuote = true }) { Text("+ Cotización") }
-                    }
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(quotes) { q ->
-                            val p = products.find { it.id == q.productId }
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text(p?.name ?: "Producto", fontWeight = FontWeight.SemiBold)
-                                    Text("Proveedor: ${q.supplier} | Precio: $${Utils.formatCurrency(q.price)}")
-                                    Text("Mín: ${q.minQuantity} | Entrega: ${q.deliveryDays} días | Envío: ${if (q.includesShipping) "Sí" else "No"}", style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            2 -> {
-                // Analysis tab
-                val grouped = quotes.groupBy { it.productId }
-                LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(grouped.entries.toList()) { (productId, productQuotes) ->
-                        val product = products.find { it.id == productId } ?: return@items
-                        val best = productQuotes.minByOrNull { it.price }
-                        val savings = best?.let { product.cost - it.price }
-
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(product.name, fontWeight = FontWeight.Bold)
-                                Text("Costo actual: $${Utils.formatCurrency(product.cost)}", color = Gray500)
-                                Spacer(Modifier.height(8.dp))
-                                Text("Cotizaciones:", fontWeight = FontWeight.SemiBold)
-                                productQuotes.forEach { q ->
-                                    val isBest = q.id == best?.id
-                                    Card(Modifier.fillMaxWidth().padding(vertical = 2.dp), colors = CardDefaults.cardColors(containerColor = if (isBest) GreenLight else MaterialTheme.colorScheme.surface)) {
-                                        Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Column {
-                                                Text(q.supplier, fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal)
-                                                Text("$${Utils.formatCurrency(q.price)}", color = Green)
-                                            }
-                                            if (isBest) Text("🏆 Mejor", color = GreenDark, style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-                                }
-                                if (savings != null && savings > 0) {
-                                    Spacer(Modifier.height(8.dp))
-                                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = GreenLight)) {
-                                        Text("Ahorro potencial: $${Utils.formatCurrency(savings)} por unidad", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold, color = GreenDark)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            0 -> SuppliersTab(suppliers, onAdd = { showAddSupplier = true })
+            1 -> QuotesTab(quotes, products, suppliers, onAdd = { showAddQuote = true })
+            2 -> AnalysisTab(quotes, products, suppliers)
         }
     }
 
@@ -160,45 +86,182 @@ fun SuppliersScreen() {
         )
     }
 
-    // Add Quote Dialog
+    // Add Quote Dialog - AHORA BASADO EN PRODUCTOS
     if (showAddQuote) {
         var selectedProduct by remember { mutableStateOf<Product?>(null) }
-        var qSupplier by remember { mutableStateOf("") }; var qPrice by remember { mutableStateOf("") }
-        var qMin by remember { mutableStateOf("1") }; var qDays by remember { mutableStateOf("0") }
-        var qTerms by remember { mutableStateOf("") }; var qShipping by remember { mutableStateOf(false) }
+        var selectedSupplier by remember { mutableStateOf<Supplier?>(null) }
+        var qPrice by remember { mutableStateOf("") }
+        var qMin by remember { mutableStateOf("1") }
+        var qDays by remember { mutableStateOf("0") }
+        var qTerms by remember { mutableStateOf("") }
+        var qShipping by remember { mutableStateOf(false) }
         var prodExpanded by remember { mutableStateOf(false) }
+        var suppExpanded by remember { mutableStateOf(false) }
+
         AlertDialog(
             onDismissRequest = { showAddQuote = false },
-            title = { Text("Nueva Cotización") },
+            title = { Text("Agregar Producto a Proveedor") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box {
-                        OutlinedButton(onClick = { prodExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text(selectedProduct?.name ?: "Producto"); Icon(Icons.Filled.ArrowDropDown, null) }
-                        DropdownMenu(prodExpanded, { prodExpanded = false }) {
-                            products.forEach { p -> DropdownMenuItem(text = { Text(p.name) }, onClick = { selectedProduct = p; prodExpanded = false }) }
+                    // Seleccionar producto
+                    ExposedDropdownMenuBox(prodExpanded, { prodExpanded = it }) {
+                        OutlinedTextField(
+                            selectedProduct?.name ?: "",
+                            {},
+                            readOnly = true,
+                            label = { Text("Producto *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(prodExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(prodExpanded, { prodExpanded = false }) {
+                            products.forEach { p ->
+                                DropdownMenuItem(text = { Text("${p.name} (Costo: $${Utils.formatCurrency(p.cost)})") }, onClick = { selectedProduct = p; prodExpanded = false })
+                            }
                         }
                     }
-                    OutlinedTextField(qSupplier, { qSupplier = it }, label = { Text("Proveedor") })
-                    OutlinedTextField(qPrice, { qPrice = it }, label = { Text("Precio") }, leadingIcon = { Text("$") })
+                    // Seleccionar proveedor
+                    ExposedDropdownMenuBox(suppExpanded, { suppExpanded = it }) {
+                        OutlinedTextField(
+                            selectedSupplier?.name ?: "",
+                            {},
+                            readOnly = true,
+                            label = { Text("Proveedor *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(suppExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(suppExpanded, { suppExpanded = false }) {
+                            suppliers.forEach { s ->
+                                DropdownMenuItem(text = { Text(s.name) }, onClick = { selectedSupplier = s; suppExpanded = false })
+                            }
+                        }
+                    }
+                    OutlinedTextField(qPrice, { qPrice = it }, label = { Text("Precio cotizado *") }, leadingIcon = { Text("$") })
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(qMin, { qMin = it }, label = { Text("Cant. mín") }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(qDays, { qDays = it }, label = { Text("Días") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(qDays, { qDays = it }, label = { Text("Días entrega") }, modifier = Modifier.weight(1f))
                     }
-                    OutlinedTextField(qTerms, { qTerms = it }, label = { Text("Condiciones") })
+                    OutlinedTextField(qTerms, { qTerms = it }, label = { Text("Cond. pago") })
                     Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(qShipping, { qShipping = it }); Text("Incluye envío") }
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
-                        selectedProduct?.let {
-                            db.quoteDao().insert(Quote(productId = it.id, supplier = qSupplier, price = qPrice.toDoubleOrNull() ?: 0.0, minQuantity = qMin.toIntOrNull() ?: 1, deliveryDays = qDays.toIntOrNull() ?: 0, paymentTerms = qTerms, includesShipping = qShipping))
+                        if (selectedProduct != null && selectedSupplier != null && qPrice.isNotBlank()) {
+                            db.quoteDao().insert(Quote(
+                                productId = selectedProduct!!.id,
+                                supplier = selectedSupplier!!.name,
+                                price = qPrice.toDoubleOrNull() ?: 0.0,
+                                minQuantity = qMin.toIntOrNull() ?: 1,
+                                deliveryDays = qDays.toIntOrNull() ?: 0,
+                                paymentTerms = qTerms,
+                                includesShipping = qShipping
+                            ))
                             showAddQuote = false
                         }
                     }
-                }) { Text("Registrar") }
+                }) { Text("Guardar") }
             },
             dismissButton = { TextButton(onClick = { showAddQuote = false }) { Text("Cancelar") } }
         )
+    }
+}
+
+@Composable
+fun SuppliersTab(suppliers: List<Supplier>, onAdd: () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
+            Button(onClick = onAdd) { Text("+ Proveedor") }
+        }
+        LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(suppliers) { s ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(s.name, fontWeight = FontWeight.SemiBold)
+                        if (s.company.isNotEmpty()) Text(s.company, style = MaterialTheme.typography.bodySmall)
+                        if (s.phone.isNotEmpty()) Text("📞 ${s.phone}", style = MaterialTheme.typography.bodySmall)
+                        if (s.email.isNotEmpty()) Text("✉️ ${s.email}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuotesTab(quotes: List<Quote>, products: List<Product>, suppliers: List<Supplier>, onAdd: () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
+            Button(onClick = onAdd) { Text("+ Producto") }
+        }
+        LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Agrupar por proveedor
+            val grouped = quotes.groupBy { it.supplier }
+            items(grouped.entries.toList()) { (supplier, supplierQuotes) ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(supplier, fontWeight = FontWeight.Bold, color = Blue)
+                        Spacer(Modifier.height(4.dp))
+                        supplierQuotes.forEach { q ->
+                            val p = products.find { it.id == q.productId }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(p?.name ?: "Producto #${q.productId}", style = MaterialTheme.typography.bodySmall)
+                                Text("$${Utils.formatCurrency(q.price)}", fontWeight = FontWeight.Medium, color = Green)
+                            }
+                            Text("Mín: ${q.minQuantity} | Entrega: ${q.deliveryDays} días", style = MaterialTheme.typography.labelSmall, color = Gray500)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AnalysisTab(quotes: List<Quote>, products: List<Product>, suppliers: List<Supplier>) {
+    val grouped = quotes.groupBy { it.productId }
+    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        items(grouped.entries.toList()) { (productId, productQuotes) ->
+            val product = products.find { it.id == productId } ?: return@items
+            val best = productQuotes.minByOrNull { it.price }
+            val savings = best?.let { product.cost - it.price }
+
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(product.name, fontWeight = FontWeight.Bold)
+                    Text("Costo actual: $${Utils.formatCurrency(product.cost)}", color = Gray500)
+                    Text("Precio venta: $${Utils.formatCurrency(product.price)}", color = Gray500)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Cotizaciones:", fontWeight = FontWeight.SemiBold)
+                    productQuotes.forEach { q ->
+                        val isBest = q.id == best?.id
+                        Card(
+                            Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            colors = CardDefaults.cardColors(containerColor = if (isBest) GreenLight else MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(Modifier.padding(8.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(q.supplier, fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal)
+                                    if (isBest) Text("🏆 Mejor opción", color = GreenDark, style = MaterialTheme.typography.labelSmall)
+                                }
+                                Text("Precio: $${Utils.formatCurrency(q.price)}", color = Green, fontWeight = FontWeight.Medium)
+                                Text("Mín: ${q.minQuantity} | Entrega: ${q.deliveryDays} días | Envío: ${if (q.includesShipping) "Sí" else "No"}", style = MaterialTheme.typography.bodySmall)
+                                if (!q.paymentTerms.isNullOrEmpty()) Text("Condiciones: ${q.paymentTerms}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    if (savings != null && savings > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = GreenLight)) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text("💰 Ahorro potencial: $${Utils.formatCurrency(savings)} por unidad", fontWeight = FontWeight.Bold, color = GreenDark)
+                                val margin = product.price - (best?.price ?: product.cost)
+                                Text("📈 Margen estimado: $${Utils.formatCurrency(margin)} (${Utils.formatCurrency((margin / product.price) * 100)}%)", color = GreenDark)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
