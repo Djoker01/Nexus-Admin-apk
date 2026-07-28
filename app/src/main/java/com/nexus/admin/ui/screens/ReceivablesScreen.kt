@@ -1,6 +1,5 @@
 package com.nexus.admin.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,17 +44,35 @@ fun ReceivablesScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // Header responsivo
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Ctas por Cobrar", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { showAddClient = true }) { Text("+ Cliente") }
-                Button(onClick = { showAddReceivable = true }) { Text("+ Cuenta") }
+            Text(
+                "Ctas por Cobrar",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedButton(
+                    onClick = { showAddClient = true },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text("+ Cliente", style = MaterialTheme.typography.bodySmall)
+                }
+                Button(
+                    onClick = { showAddReceivable = true },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text("+ Cuenta", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
 
+        // KPIs
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -74,6 +91,7 @@ fun ReceivablesScreen() {
             }
         }
 
+        // Lista
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
@@ -89,20 +107,36 @@ fun ReceivablesScreen() {
                                 Text(Utils.formatDate(r.date), style = MaterialTheme.typography.bodySmall, color = Gray500)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("$${Utils.formatCurrency(r.balance)}", fontWeight = FontWeight.Bold,
-                                    color = when(r.status) { "paid" -> Green; "partial" -> Yellow; else -> Red })
-                                SuggestionChip(onClick = {}, label = {
-                                    Text(when(r.status) { "paid" -> "Pagado"; "partial" -> "Parcial"; else -> "Pendiente" })
-                                })
+                                Text(
+                                    "$${Utils.formatCurrency(r.balance)}",
+                                    fontWeight = FontWeight.Bold,
+                                    color = when (r.status) {
+                                        "paid" -> Green; "partial" -> Yellow; else -> Red
+                                    }
+                                )
+                                SuggestionChip(
+                                    onClick = {},
+                                    label = {
+                                        Text(
+                                            when (r.status) {
+                                                "paid" -> "Pagado"; "partial" -> "Parcial"; else -> "Pendiente"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                )
                             }
                         }
                         if (r.status != "paid") {
                             Spacer(Modifier.height(8.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                Button(onClick = { showPayment = r }, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
+                                Button(
+                                    onClick = { showPayment = r },
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                                ) {
                                     Icon(Icons.Filled.Payments, null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
-                                    Text("Abonar")
+                                    Text("Abonar", style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
@@ -110,7 +144,10 @@ fun ReceivablesScreen() {
                             Spacer(Modifier.height(8.dp))
                             Text("Abonos:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                             r.payments.forEach { p ->
-                                Text("${Utils.formatDate(p.date)}: $${Utils.formatCurrency(p.amount)} - ${p.method}", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    "${Utils.formatDate(p.date)}: $${Utils.formatCurrency(p.amount)} - ${p.method}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
                         }
                     }
@@ -130,10 +167,10 @@ fun ReceivablesScreen() {
             title = { Text("Nuevo Cliente") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("Nombre *") })
-                    OutlinedTextField(phone, { phone = it }, label = { Text("Teléfono") })
-                    OutlinedTextField(email, { email = it }, label = { Text("Email") })
-                    OutlinedTextField(address, { address = it }, label = { Text("Dirección") })
+                    OutlinedTextField(name, { name = it }, label = { Text("Nombre *") }, singleLine = true)
+                    OutlinedTextField(phone, { phone = it }, label = { Text("Teléfono") }, singleLine = true)
+                    OutlinedTextField(email, { email = it }, label = { Text("Email") }, singleLine = true)
+                    OutlinedTextField(address, { address = it }, label = { Text("Dirección") }, singleLine = true)
                 }
             },
             confirmButton = {
@@ -172,7 +209,8 @@ fun ReceivablesScreen() {
                             readOnly = true,
                             label = { Text("Cliente *") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = clientExpanded) },
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            singleLine = true
                         )
                         ExposedDropdownMenu(
                             expanded = clientExpanded,
@@ -180,7 +218,7 @@ fun ReceivablesScreen() {
                         ) {
                             if (clients.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text("No hay clientes") },
+                                    text = { Text("No hay clientes - Cree uno primero") },
                                     onClick = { clientExpanded = false }
                                 )
                             } else {
@@ -196,8 +234,13 @@ fun ReceivablesScreen() {
                             }
                         }
                     }
-                    OutlinedTextField(concept, { concept = it }, label = { Text("Concepto") })
-                    OutlinedTextField(amount, { amount = it }, label = { Text("Monto Total") }, leadingIcon = { Text("$") }, singleLine = true)
+                    OutlinedTextField(concept, { concept = it }, label = { Text("Concepto *") }, singleLine = true)
+                    OutlinedTextField(
+                        amount, { amount = it },
+                        label = { Text("Monto Total *") },
+                        leadingIcon = { Text("$") },
+                        singleLine = true
+                    )
                 }
             },
             confirmButton = {
@@ -223,7 +266,7 @@ fun ReceivablesScreen() {
         )
     }
 
-    // Payment Dialog - CORREGIDO
+    // Payment Dialog
     showPayment?.let { receivable ->
         var payAmount by remember { mutableStateOf("") }
         var payMethod by remember { mutableStateOf("Efectivo") }
@@ -239,9 +282,8 @@ fun ReceivablesScreen() {
                     Text("Total: $${Utils.formatCurrency(receivable.totalAmount)}")
 
                     OutlinedTextField(
-                        payAmount,
-                        { payAmount = it },
-                        label = { Text("Monto a abonar") },
+                        payAmount, { payAmount = it },
+                        label = { Text("Monto a abonar *") },
                         leadingIcon = { Text("$") },
                         singleLine = true
                     )
@@ -258,10 +300,7 @@ fun ReceivablesScreen() {
                             listOf("Efectivo", "Tarjeta", "Transferencia").forEach { method ->
                                 DropdownMenuItem(
                                     text = { Text(method) },
-                                    onClick = {
-                                        payMethod = method
-                                        methodExpanded = false
-                                    }
+                                    onClick = { payMethod = method; methodExpanded = false }
                                 )
                             }
                         }
@@ -286,13 +325,13 @@ fun ReceivablesScreen() {
                                 method = payMethod
                             )
 
-                            val updatedReceivable = receivable.copy(
+                            val updated = receivable.copy(
                                 balance = newBalance,
                                 status = newStatus,
                                 payments = receivable.payments + newPayment
                             )
 
-                            db.receivableDao().update(updatedReceivable)
+                            db.receivableDao().update(updated)
 
                             if (payMethod == "Efectivo") {
                                 db.cashMovementDao().insert(
@@ -310,9 +349,7 @@ fun ReceivablesScreen() {
                     }
                 }) { Text("Registrar Abono") }
             },
-            dismissButton = {
-                TextButton(onClick = { showPayment = null }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showPayment = null }) { Text("Cancelar") } }
         )
     }
 }
