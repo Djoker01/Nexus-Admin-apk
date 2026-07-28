@@ -2,6 +2,7 @@ package com.nexus.admin.ui.screens
 
 import android.app.Activity
 import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -16,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import android.widget.Toast
 import com.nexus.admin.data.AppDatabase
 import com.nexus.admin.data.entity.Product
 import com.nexus.admin.ui.theme.*
@@ -34,6 +34,7 @@ fun InventoryScreen() {
     var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<Product?>(null) }
+    var showScannerDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         db.productDao().getAllProducts().collect { allProducts = it }
@@ -55,8 +56,19 @@ fun InventoryScreen() {
             val barcode = result.data?.getStringExtra("SCAN_RESULT") ?: ""
             if (barcode.isNotEmpty()) {
                 searchQuery = barcode
-                Toast.makeText(context, "Código escaneado: $barcode", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Código: $barcode", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    fun openScanner() {
+        try {
+            val intent = Intent("com.google.zxing.client.android.SCAN").apply {
+                putExtra("SCAN_MODE", "PRODUCT_MODE")
+            }
+            scannerLauncher.launch(intent)
+        } catch (e: Exception) {
+            showScannerDialog = true
         }
     }
 
@@ -82,7 +94,7 @@ fun InventoryScreen() {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                label = { Text("Buscar...") },
+                label = { Text("Buscar por nombre o SKU...") },
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -95,27 +107,11 @@ fun InventoryScreen() {
                 singleLine = true
             )
             
-            // Botón de escanear
             IconButton(
-                onClick = {
-                    try {
-                        val intent = Intent("com.google.zxing.client.android.SCAN").apply {
-                            putExtra("SCAN_MODE", "PRODUCT_MODE")
-                        }
-                        scannerLauncher.launch(intent)
-                    } catch (e: Exception) {
-                        // Si no hay app de escáner, mostrar entrada manual
-                        Toast.makeText(context, "Ingrese el código manualmente en la búsqueda", Toast.LENGTH_LONG).show()
-                    }
-                },
-                modifier = Modifier.size(56.dp)
+                onClick = { openScanner() },
+                modifier = Modifier.size(48.dp)
             ) {
-                Icon(
-                    Icons.Filled.QrCodeScanner,
-                    "Escanear código",
-                    tint = Blue,
-                    modifier = Modifier.size(28.dp)
-                )
+                Icon(Icons.Filled.QrCodeScanner, "Escanear", tint = Blue)
             }
         }
 
@@ -132,10 +128,7 @@ fun InventoryScreen() {
                     product.stock <= product.minStock -> YellowLight
                     else -> MaterialTheme.colorScheme.surface
                 }
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = bgColor)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = bgColor)) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -144,11 +137,7 @@ fun InventoryScreen() {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(product.name, fontWeight = FontWeight.SemiBold)
                             Text("SKU: ${product.sku.ifEmpty { "N/A" }}", style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                "Stock: ${product.stock} | Precio: $${Utils.formatCurrency(product.price)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Gray500
-                            )
+                            Text("Stock: ${product.stock} | $${Utils.formatCurrency(product.price)}", style = MaterialTheme.typography.bodySmall)
                             if (product.stock <= product.minStock && product.stock > 0)
                                 Text("⚠️ Stock bajo", color = Yellow, style = MaterialTheme.typography.labelSmall)
                             if (product.stock == 0)
@@ -158,9 +147,7 @@ fun InventoryScreen() {
                             IconButton(onClick = { editingProduct = product; showAddDialog = true }) {
                                 Icon(Icons.Filled.Edit, "Editar", tint = Blue)
                             }
-                            IconButton(onClick = {
-                                scope.launch { db.productDao().delete(product) }
-                            }) {
+                            IconButton(onClick = { scope.launch { db.productDao().delete(product) } }) {
                                 Icon(Icons.Filled.Delete, "Eliminar", tint = Red)
                             }
                         }
@@ -168,6 +155,38 @@ fun InventoryScreen() {
                 }
             }
         }
+    }
+
+    // Scanner manual dialog
+    if (showScannerDialog) {
+        var manualCode by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showScannerDialog = false },
+            title = { Text("Escanear / Ingresar código") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("No se encontró una app de escáner.\nIngrese el código manualmente:")
+                    OutlinedTextField(
+                        value = manualCode,
+                        onValueChange = { manualCode = it },
+                        label = { Text("Código de barras / SKU") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (manualCode.isNotBlank()) {
+                        searchQuery = manualCode
+                    }
+                    showScannerDialog = false
+                }) { Text("Buscar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showScannerDialog = false }) { Text("Cancelar") }
+            }
+        )
     }
 
     // Add/Edit Dialog
@@ -187,26 +206,9 @@ fun InventoryScreen() {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, singleLine = true)
                     
-                    // SKU con botón de escanear
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            sku, { sku = it },
-                            label = { Text("SKU/Código") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                        IconButton(
-                            onClick = {
-                                try {
-                                    val intent = Intent("com.google.zxing.client.android.SCAN").apply {
-                                        putExtra("SCAN_MODE", "PRODUCT_MODE")
-                                    }
-                                    scannerLauncher.launch(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "App de escáner no disponible", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        ) {
+                        OutlinedTextField(sku, { sku = it }, label = { Text("SKU/Código") }, modifier = Modifier.weight(1f), singleLine = true)
+                        IconButton(onClick = { openScanner() }) {
                             Icon(Icons.Filled.QrCodeScanner, "Escanear", tint = Blue)
                         }
                     }
@@ -226,25 +228,16 @@ fun InventoryScreen() {
                 Button(onClick = {
                     scope.launch {
                         val p = Product(
-                            id = editingProduct?.id ?: 0,
-                            name = name,
-                            sku = sku,
-                            category = category,
-                            cost = cost.toDoubleOrNull() ?: 0.0,
-                            price = price.toDoubleOrNull() ?: 0.0,
-                            stock = stock.toIntOrNull() ?: 0,
-                            minStock = minStock.toIntOrNull() ?: 5
+                            id = editingProduct?.id ?: 0, name = name, sku = sku, category = category,
+                            cost = cost.toDoubleOrNull() ?: 0.0, price = price.toDoubleOrNull() ?: 0.0,
+                            stock = stock.toIntOrNull() ?: 0, minStock = minStock.toIntOrNull() ?: 5
                         )
-                        if (editingProduct != null) db.productDao().update(p)
-                        else db.productDao().insert(p)
-                        showAddDialog = false
-                        editingProduct = null
+                        if (editingProduct != null) db.productDao().update(p) else db.productDao().insert(p)
+                        showAddDialog = false; editingProduct = null
                     }
                 }) { Text("Guardar") }
             },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false; editingProduct = null }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showAddDialog = false; editingProduct = null }) { Text("Cancelar") } }
         )
     }
 }
