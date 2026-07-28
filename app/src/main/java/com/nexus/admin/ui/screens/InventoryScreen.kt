@@ -1,10 +1,6 @@
 package com.nexus.admin.ui.screens
 
-import android.app.Activity
-import android.content.Intent
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nexus.admin.data.AppDatabase
 import com.nexus.admin.data.entity.Product
+import com.nexus.admin.ui.components.BarcodeScannerScreen
 import com.nexus.admin.ui.theme.*
 import com.nexus.admin.utils.Utils
 import kotlinx.coroutines.launch
@@ -34,7 +31,7 @@ fun InventoryScreen() {
     var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<Product?>(null) }
-    var showScannerDialog by remember { mutableStateOf(false) }
+    var showScanner by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         db.productDao().getAllProducts().collect { allProducts = it }
@@ -45,30 +42,6 @@ fun InventoryScreen() {
         else allProducts.filter {
             it.name.contains(searchQuery, ignoreCase = true) ||
             it.sku.contains(searchQuery, ignoreCase = true)
-        }
-    }
-
-    // Escáner de código de barras
-    val scannerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val barcode = result.data?.getStringExtra("SCAN_RESULT") ?: ""
-            if (barcode.isNotEmpty()) {
-                searchQuery = barcode
-                Toast.makeText(context, "Código: $barcode", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    fun openScanner() {
-        try {
-            val intent = Intent("com.google.zxing.client.android.SCAN").apply {
-                putExtra("SCAN_MODE", "PRODUCT_MODE")
-            }
-            scannerLauncher.launch(intent)
-        } catch (e: Exception) {
-            showScannerDialog = true
         }
     }
 
@@ -86,7 +59,7 @@ fun InventoryScreen() {
             }
         }
 
-        // Barra de búsqueda con escáner
+        // Barra de búsqueda con botón de escáner
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -107,11 +80,13 @@ fun InventoryScreen() {
                 singleLine = true
             )
             
-            IconButton(
-                onClick = { openScanner() },
-                modifier = Modifier.size(48.dp)
+            // Botón de escáner con cámara
+            FilledIconButton(
+                onClick = { showScanner = true },
+                modifier = Modifier.size(56.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = Blue)
             ) {
-                Icon(Icons.Filled.QrCodeScanner, "Escanear", tint = Blue)
+                Icon(Icons.Filled.QrCodeScanner, "Escanear con cámara", tint = White, modifier = Modifier.size(28.dp))
             }
         }
 
@@ -157,35 +132,15 @@ fun InventoryScreen() {
         }
     }
 
-    // Scanner manual dialog
-    if (showScannerDialog) {
-        var manualCode by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showScannerDialog = false },
-            title = { Text("Escanear / Ingresar código") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("No se encontró una app de escáner.\nIngrese el código manualmente:")
-                    OutlinedTextField(
-                        value = manualCode,
-                        onValueChange = { manualCode = it },
-                        label = { Text("Código de barras / SKU") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+    // Pantalla de escáner
+    if (showScanner) {
+        BarcodeScannerScreen(
+            onBarcodeScanned = { barcode ->
+                searchQuery = barcode
+                showScanner = false
+                Toast.makeText(context, "Código escaneado: $barcode", Toast.LENGTH_SHORT).show()
             },
-            confirmButton = {
-                Button(onClick = {
-                    if (manualCode.isNotBlank()) {
-                        searchQuery = manualCode
-                    }
-                    showScannerDialog = false
-                }) { Text("Buscar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showScannerDialog = false }) { Text("Cancelar") }
-            }
+            onClose = { showScanner = false }
         )
     }
 
@@ -198,26 +153,35 @@ fun InventoryScreen() {
         var price by remember { mutableStateOf(editingProduct?.price?.toString() ?: "") }
         var stock by remember { mutableStateOf(editingProduct?.stock?.toString() ?: "0") }
         var minStock by remember { mutableStateOf(editingProduct?.minStock?.toString() ?: "5") }
+        var showSkuScanner by remember { mutableStateOf(false) }
 
         AlertDialog(
             onDismissRequest = { showAddDialog = false; editingProduct = null },
             title = { Text(if (editingProduct != null) "Editar Producto" else "Nuevo Producto") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, singleLine = true)
+                    OutlinedTextField(name, { name = it }, label = { Text("Nombre *") }, singleLine = true)
                     
+                    // SKU con botón de escanear
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(sku, { sku = it }, label = { Text("SKU/Código") }, modifier = Modifier.weight(1f), singleLine = true)
-                        IconButton(onClick = { openScanner() }) {
-                            Icon(Icons.Filled.QrCodeScanner, "Escanear", tint = Blue)
+                        OutlinedTextField(
+                            sku, { sku = it },
+                            label = { Text("SKU/Código") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        IconButton(onClick = { showSkuScanner = true }) {
+                            Icon(Icons.Filled.QrCodeScanner, "Escanear SKU", tint = Blue)
                         }
                     }
                     
                     OutlinedTextField(category, { category = it }, label = { Text("Categoría") }, singleLine = true)
+                    
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(cost, { cost = it }, label = { Text("Costo") }, modifier = Modifier.weight(1f), singleLine = true)
                         OutlinedTextField(price, { price = it }, label = { Text("Precio") }, modifier = Modifier.weight(1f), singleLine = true)
                     }
+                    
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(stock, { stock = it }, label = { Text("Stock") }, modifier = Modifier.weight(1f), singleLine = true)
                         OutlinedTextField(minStock, { minStock = it }, label = { Text("Stock Mín") }, modifier = Modifier.weight(1f), singleLine = true)
@@ -228,9 +192,12 @@ fun InventoryScreen() {
                 Button(onClick = {
                     scope.launch {
                         val p = Product(
-                            id = editingProduct?.id ?: 0, name = name, sku = sku, category = category,
-                            cost = cost.toDoubleOrNull() ?: 0.0, price = price.toDoubleOrNull() ?: 0.0,
-                            stock = stock.toIntOrNull() ?: 0, minStock = minStock.toIntOrNull() ?: 5
+                            id = editingProduct?.id ?: 0,
+                            name = name, sku = sku, category = category,
+                            cost = cost.toDoubleOrNull() ?: 0.0,
+                            price = price.toDoubleOrNull() ?: 0.0,
+                            stock = stock.toIntOrNull() ?: 0,
+                            minStock = minStock.toIntOrNull() ?: 5
                         )
                         if (editingProduct != null) db.productDao().update(p) else db.productDao().insert(p)
                         showAddDialog = false; editingProduct = null
@@ -239,5 +206,16 @@ fun InventoryScreen() {
             },
             dismissButton = { TextButton(onClick = { showAddDialog = false; editingProduct = null }) { Text("Cancelar") } }
         )
+
+        // Escáner para SKU en el diálogo
+        if (showSkuScanner) {
+            BarcodeScannerScreen(
+                onBarcodeScanned = { barcode ->
+                    sku = barcode
+                    showSkuScanner = false
+                },
+                onClose = { showSkuScanner = false }
+            )
+        }
     }
 }
