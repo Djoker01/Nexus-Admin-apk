@@ -210,7 +210,6 @@ fun SalesScreen() {
             title = { Text("Nueva Venta") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Cliente
                     OutlinedTextField(
                         client,
                         { client = it },
@@ -219,7 +218,6 @@ fun SalesScreen() {
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Método de pago
                     var payExpanded by remember { mutableStateOf(false) }
                     Box {
                         OutlinedButton(
@@ -277,7 +275,6 @@ fun SalesScreen() {
                                     )
                                 }
 
-                                // Control de cantidad
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(
                                         onClick = {
@@ -288,11 +285,7 @@ fun SalesScreen() {
                                         },
                                         modifier = Modifier.size(32.dp)
                                     ) {
-                                        Icon(
-                                            Icons.Filled.Remove,
-                                            "Reducir",
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        Icon(Icons.Filled.Remove, "Reducir", modifier = Modifier.size(20.dp))
                                     }
 
                                     Text(
@@ -311,11 +304,7 @@ fun SalesScreen() {
                                         },
                                         modifier = Modifier.size(32.dp)
                                     ) {
-                                        Icon(
-                                            Icons.Filled.Add,
-                                            "Aumentar",
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        Icon(Icons.Filled.Add, "Aumentar", modifier = Modifier.size(20.dp))
                                     }
                                 }
 
@@ -414,14 +403,12 @@ fun SalesScreen() {
                                 )
                                 db.saleDao().insert(sale)
 
-                                // Actualizar stock
                                 selectedProducts.values.forEach { (product, qty) ->
                                     db.productDao().update(
                                         product.copy(stock = product.stock - qty)
                                     )
                                 }
 
-                                // Registrar en caja si es efectivo
                                 if (paymentMethod == "Efectivo") {
                                     db.cashMovementDao().insert(
                                         CashMovement(
@@ -463,7 +450,6 @@ fun SalesScreen() {
                                 }
                                 Toast.makeText(context, "✅ ${product.name} agregado", Toast.LENGTH_SHORT).show()
                             } else if (selectedProducts.containsKey(product.id)) {
-                                // Incrementar cantidad si ya existe
                                 val currentQty = selectedProducts[product.id]?.second ?: 1
                                 if (currentQty < product.stock) {
                                     selectedProducts = selectedProducts.toMutableMap().also {
@@ -508,9 +494,7 @@ fun SalesScreen() {
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(Modifier.height(8.dp))
-                        LazyColumn(
-                            modifier = Modifier.heightIn(max = 400.dp)
-                        ) {
+                        LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
                             if (filtered.isEmpty()) {
                                 item {
                                     Text(
@@ -525,38 +509,46 @@ fun SalesScreen() {
                                 val isAlreadyAdded = selectedProducts.containsKey(product.id)
 
                                 ListItem(
-    headlineContent = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(product.name)
-            if (isOutOfStock) {
-                Spacer(Modifier.width(8.dp))
-                SuggestionChip(
-                    onClick = {},
-                    label = { Text("Agotado") }
-                )
-            }
-            if (isAlreadyAdded) {
-                Spacer(Modifier.width(8.dp))
-                SuggestionChip(
-                    onClick = {},
-                    label = { Text("Agregado") }
-                )
-            }
-        }
-    },
-    supportingContent = {
-        Text("Stock: ${product.stock} | Precio: $${Utils.formatCurrency(product.price)}")
-    },
-    modifier = Modifier.clickable {
-        if (!isOutOfStock && !isAlreadyAdded) {
-            selectedProducts = selectedProducts.toMutableMap().also {
-                it[product.id] = product to 1
-            }
-            showProductPicker = false
-        }
-    }
-)
-                               
+                                    headlineContent = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(product.name)
+                                            if (isOutOfStock) {
+                                                Spacer(Modifier.width(8.dp))
+                                                SuggestionChip(
+                                                    onClick = {},
+                                                    label = { Text("Agotado") }
+                                                )
+                                            }
+                                            if (isAlreadyAdded) {
+                                                Spacer(Modifier.width(8.dp))
+                                                SuggestionChip(
+                                                    onClick = {},
+                                                    label = { Text("Agregado") }
+                                                )
+                                            }
+                                        }
+                                    },
+                                    supportingContent = {
+                                        Text("Stock: ${product.stock} | Precio: $${Utils.formatCurrency(product.price)}")
+                                    },
+                                    modifier = Modifier.clickable {
+                                        if (!isOutOfStock && !isAlreadyAdded) {
+                                            selectedProducts = selectedProducts.toMutableMap().also {
+                                                it[product.id] = product to 1
+                                            }
+                                            showProductPicker = false
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showProductPicker = false }) {
+                        Text("Listo")
+                    }
+                }
             )
         }
     }
