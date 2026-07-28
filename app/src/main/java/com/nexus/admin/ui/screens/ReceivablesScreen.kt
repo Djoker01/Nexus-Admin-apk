@@ -121,8 +121,10 @@ fun ReceivablesScreen() {
 
     // Add Client Dialog
     if (showAddClient) {
-        var name by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }
-        var email by remember { mutableStateOf("") }; var address by remember { mutableStateOf("") }
+        var name by remember { mutableStateOf("") }
+        var phone by remember { mutableStateOf("") }
+        var email by remember { mutableStateOf("") }
+        var address by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showAddClient = false },
             title = { Text("Nuevo Cliente") },
@@ -148,7 +150,7 @@ fun ReceivablesScreen() {
         )
     }
 
-    // Add Receivable Dialog - CORREGIDO con selección de cliente
+    // Add Receivable Dialog
     if (showAddReceivable) {
         var selectedClient by remember { mutableStateOf<Client?>(null) }
         var concept by remember { mutableStateOf("") }
@@ -160,7 +162,6 @@ fun ReceivablesScreen() {
             title = { Text("Nueva Cuenta por Cobrar") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Selector de cliente mejorado
                     ExposedDropdownMenuBox(
                         expanded = clientExpanded,
                         onExpandedChange = { clientExpanded = it }
@@ -179,7 +180,7 @@ fun ReceivablesScreen() {
                         ) {
                             if (clients.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text("No hay clientes registrados") },
+                                    text = { Text("No hay clientes") },
                                     onClick = { clientExpanded = false }
                                 )
                             } else {
@@ -195,7 +196,6 @@ fun ReceivablesScreen() {
                             }
                         }
                     }
-
                     OutlinedTextField(concept, { concept = it }, label = { Text("Concepto") })
                     OutlinedTextField(amount, { amount = it }, label = { Text("Monto Total") }, leadingIcon = { Text("$") }, singleLine = true)
                 }
@@ -223,7 +223,7 @@ fun ReceivablesScreen() {
         )
     }
 
-    // Payment Dialog
+    // Payment Dialog - CORREGIDO
     showPayment?.let { receivable ->
         var payAmount by remember { mutableStateOf("") }
         var payMethod by remember { mutableStateOf("Efectivo") }
@@ -236,15 +236,33 @@ fun ReceivablesScreen() {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Cliente: ${receivable.clientName}")
                     Text("Pendiente: $${Utils.formatCurrency(receivable.balance)}")
-                    OutlinedTextField(payAmount, { payAmount = it }, label = { Text("Monto") }, leadingIcon = { Text("$") }, singleLine = true)
-                    
+                    Text("Total: $${Utils.formatCurrency(receivable.totalAmount)}")
+
+                    OutlinedTextField(
+                        payAmount,
+                        { payAmount = it },
+                        label = { Text("Monto a abonar") },
+                        leadingIcon = { Text("$") },
+                        singleLine = true
+                    )
+
                     Box {
-                        OutlinedButton(onClick = { methodExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Método: $payMethod"); Icon(Icons.Filled.ArrowDropDown, null)
+                        OutlinedButton(
+                            onClick = { methodExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Método: $payMethod")
+                            Icon(Icons.Filled.ArrowDropDown, null)
                         }
                         DropdownMenu(methodExpanded, { methodExpanded = false }) {
-                            listOf("Efectivo", "Tarjeta", "Transferencia").forEach { m ->
-                                DropdownMenuItem(text = { Text(m) }, onClick = { payMethod = m; methodExpanded = false })
+                            listOf("Efectivo", "Tarjeta", "Transferencia").forEach { method ->
+                                DropdownMenuItem(
+                                    text = { Text(method) },
+                                    onClick = {
+                                        payMethod = method
+                                        methodExpanded = false
+                                    }
+                                )
                             }
                         }
                     }
@@ -261,26 +279,40 @@ fun ReceivablesScreen() {
                                 newBalance < receivable.totalAmount -> "partial"
                                 else -> "pending"
                             }
-                            db.receivableDao().update(receivable.copy(
+
+                            val newPayment = Payment(
+                                amount = amt,
+                                date = System.currentTimeMillis(),
+                                method = payMethod
+                            )
+
+                            val updatedReceivable = receivable.copy(
                                 balance = newBalance,
                                 status = newStatus,
-                                payments = receivable.payments + Payment(amount = amt, date = System.currentTimeMillis(), method = payMethod)
-                            ))
+                                payments = receivable.payments + newPayment
+                            )
+
+                            db.receivableDao().update(updatedReceivable)
+
                             if (payMethod == "Efectivo") {
                                 db.cashMovementDao().insert(
-    CashMovement(
-        type = "Ingreso",
-        amount = amt,
-        description = "Abono: ${receivable.clientName}",
-        date = System.currentTimeMillis()
-    )
-)
+                                    CashMovement(
+                                        type = "Ingreso",
+                                        amount = amt,
+                                        description = "Abono: ${receivable.clientName} - ${receivable.concept}",
+                                        date = System.currentTimeMillis()
+                                    )
+                                )
+                            }
+
                             showPayment = null
                         }
                     }
-                }) { Text("Registrar") }
+                }) { Text("Registrar Abono") }
             },
-            dismissButton = { TextButton(onClick = { showPayment = null }) { Text("Cancelar") } }
+            dismissButton = {
+                TextButton(onClick = { showPayment = null }) { Text("Cancelar") }
+            }
         )
     }
 }
