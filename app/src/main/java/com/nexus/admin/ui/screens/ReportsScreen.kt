@@ -334,7 +334,8 @@ fun ReportsScreen() {
     }
 }
 
-// ========== FUNCIÓN DE EXPORTACIÓN A PDF ==========
+
+            // ========== FUNCIÓN DE EXPORTACIÓN A PDF (CORREGIDA) ==========
 
 suspend fun exportReportToPdf(
     context: Context,
@@ -364,116 +365,89 @@ suspend fun exportReportToPdf(
         }
 
         // Título principal
-        document.add(
-            Paragraph("NEXUS ADMIN - REPORTE $periodName".uppercase())
-                .setBold()
-                .setFontSize(18f)
-                .setTextAlignment(TextAlignment.CENTER)
-        )
-        document.add(
-            Paragraph("Fecha: ${Utils.formatDate(System.currentTimeMillis())}")
-                .setFontSize(10f)
-                .setTextAlignment(TextAlignment.CENTER)
-        )
-        document.add(Paragraph("\n"))
+        val titleParagraph = Paragraph("NEXUS ADMIN - REPORTE $periodName".uppercase())
+            .setBold()
+            .setFontSize(18f)
+            .setTextAlignment(TextAlignment.CENTER)
+        document.add(titleParagraph as com.itextpdf.layout.element.IBlockElement)
+
+        val dateParagraph = Paragraph("Fecha: ${Utils.formatDate(System.currentTimeMillis())}")
+            .setFontSize(10f)
+            .setTextAlignment(TextAlignment.CENTER)
+        document.add(dateParagraph as com.itextpdf.layout.element.IBlockElement)
+
+        val spacer = Paragraph("\n")
+        document.add(spacer as com.itextpdf.layout.element.IBlockElement)
 
         // Sección Resumen
-        document.add(
-            Paragraph("RESUMEN")
-                .setBold()
-                .setFontSize(14f)
+        val summaryTitle = Paragraph("RESUMEN")
+            .setBold()
+            .setFontSize(14f)
+        document.add(summaryTitle as com.itextpdf.layout.element.IBlockElement)
+
+        val lines = listOf(
+            "Ventas Totales: $$totalSales",
+            "Ganancia Neta: $$totalProfit",
+            "Transacciones: $transactions",
+            "Ticket Promedio: $$avgTicket",
+            "Gastos Totales: $$totalExpenses",
+            "Balance Neto: $${totalProfit - totalExpenses}"
         )
-        document.add(Paragraph("Ventas Totales: $${Utils.formatCurrency(totalSales)}").setFontSize(11f))
-        document.add(Paragraph("Ganancia Neta: $${Utils.formatCurrency(totalProfit)}").setFontSize(11f))
-        document.add(Paragraph("Transacciones: $transactions").setFontSize(11f))
-        document.add(Paragraph("Ticket Promedio: $${Utils.formatCurrency(avgTicket)}").setFontSize(11f))
-        document.add(Paragraph("Gastos Totales: $${Utils.formatCurrency(totalExpenses)}").setFontSize(11f))
-        document.add(
-            Paragraph("Balance Neto: $${Utils.formatCurrency(totalProfit - totalExpenses)}")
-                .setFontSize(11f)
-                .setBold()
-        )
-        document.add(Paragraph("\n"))
+        lines.forEach { line ->
+            document.add(Paragraph(line).setFontSize(11f) as com.itextpdf.layout.element.IBlockElement)
+        }
+        document.add(Paragraph("\n") as com.itextpdf.layout.element.IBlockElement)
 
         // Sección Métodos de Pago
         if (paymentMethods.isNotEmpty()) {
-            document.add(
-                Paragraph("VENTAS POR MÉTODO DE PAGO")
-                    .setBold()
-                    .setFontSize(14f)
-            )
-            val methodsTable = Table(2f)
+            val methodsTitle = Paragraph("VENTAS POR MÉTODO DE PAGO")
+                .setBold()
+                .setFontSize(14f)
+            document.add(methodsTitle as com.itextpdf.layout.element.IBlockElement)
+
+            val methodsTable = Table(2)  // ← Int, no Float
             methodsTable.setWidth(UnitValue.createPercentValue(100f))
-            
-            // Encabezados de tabla
-            methodsTable.addCell(
-                Cell().add(
-                    Paragraph("Método")
-                        .setBold()
-                        .setFontSize(10f)
-                )
-            )
-            methodsTable.addCell(
-                Cell().add(
-                    Paragraph("Total")
-                        .setBold()
-                        .setFontSize(10f)
-                )
-            )
-            
-            // Datos
+
+            methodsTable.addCell(Cell().add(Paragraph("Método").setBold().setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
+            methodsTable.addCell(Cell().add(Paragraph("Total").setBold().setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
+
             paymentMethods.forEach { (method, total) ->
-                methodsTable.addCell(Cell().add(Paragraph(method).setFontSize(10f)))
-                methodsTable.addCell(
-                    Cell().add(
-                        Paragraph("$${Utils.formatCurrency(total)}")
-                            .setFontSize(10f)
-                    )
-                )
+                methodsTable.addCell(Cell().add(Paragraph(method).setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
+                methodsTable.addCell(Cell().add(Paragraph("$$total").setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
             }
             document.add(methodsTable)
-            document.add(Paragraph("\n"))
+            document.add(Paragraph("\n") as com.itextpdf.layout.element.IBlockElement)
         }
 
         // Sección Top 10 Productos
         if (topProducts.isNotEmpty()) {
-            document.add(
-                Paragraph("TOP 10 PRODUCTOS MÁS VENDIDOS")
-                    .setBold()
-                    .setFontSize(14f)
-            )
-            val productsTable = Table(3f)
+            val productsTitle = Paragraph("TOP 10 PRODUCTOS MÁS VENDIDOS")
+                .setBold()
+                .setFontSize(14f)
+            document.add(productsTitle as com.itextpdf.layout.element.IBlockElement)
+
+            val productsTable = Table(3)  // ← Int, no Float
             productsTable.setWidth(UnitValue.createPercentValue(100f))
-            
-            // Encabezados
-            productsTable.addCell(
-                Cell().add(Paragraph("#").setBold().setFontSize(10f))
-            )
-            productsTable.addCell(
-                Cell().add(Paragraph("Producto").setBold().setFontSize(10f))
-            )
-            productsTable.addCell(
-                Cell().add(Paragraph("Cantidad Vendida").setBold().setFontSize(10f))
-            )
-            
-            // Datos
+
+            productsTable.addCell(Cell().add(Paragraph("#").setBold().setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
+            productsTable.addCell(Cell().add(Paragraph("Producto").setBold().setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
+            productsTable.addCell(Cell().add(Paragraph("Cantidad").setBold().setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
+
             topProducts.forEachIndexed { index, (name, qty) ->
-                productsTable.addCell(Cell().add(Paragraph("${index + 1}").setFontSize(10f)))
-                productsTable.addCell(Cell().add(Paragraph(name).setFontSize(10f)))
-                productsTable.addCell(Cell().add(Paragraph("$qty").setFontSize(10f)))
+                productsTable.addCell(Cell().add(Paragraph("${index + 1}").setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
+                productsTable.addCell(Cell().add(Paragraph(name).setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
+                productsTable.addCell(Cell().add(Paragraph("$qty").setFontSize(10f) as com.itextpdf.layout.element.IBlockElement))
             }
             document.add(productsTable)
-            document.add(Paragraph("\n"))
         }
 
         // Pie de página
-        document.add(Paragraph("\n"))
-        document.add(
-            Paragraph("Reporte generado por Nexus Admin v1.0 - ${Utils.formatDate(System.currentTimeMillis())}")
-                .setFontSize(8f)
-                .setTextAlignment(TextAlignment.CENTER)
-                .setItalic()
-        )
+        document.add(Paragraph("\n") as com.itextpdf.layout.element.IBlockElement)
+        val footer = Paragraph("Reporte generado por Nexus Admin v1.0 - ${Utils.formatDate(System.currentTimeMillis())}")
+            .setFontSize(8f)
+            .setTextAlignment(TextAlignment.CENTER)
+            .setItalic()
+        document.add(footer as com.itextpdf.layout.element.IBlockElement)
 
         document.close()
         outputStream.close()
