@@ -112,7 +112,6 @@ fun NexusApp() {
                         composable(Screen.Receivables.route) { ReceivablesScreen() }
                         composable(Screen.Shrinkage.route) { ShrinkageScreen() }
                         composable(Screen.Restock.route) { RestockScreen() }
-                        composable(Screen.Suppliers.route) { SuppliersScreen() }
                         composable(Screen.Reports.route) { ReportsScreen() }
                         composable(Screen.Backup.route) { BackupScreen() }
                     }
