@@ -9,14 +9,13 @@ sealed class Screen(val route: String, val title: String) {
     object Receivables : Screen("receivables", "Ctas por Cobrar")
     object Shrinkage : Screen("shrinkage", "Mermas")
     object Restock : Screen("restock", "Reabastecimiento")
-    object Suppliers : Screen("suppliers", "Proveedores")
     object Reports : Screen("reports", "Reportes")
     object Backup : Screen("backup", "Respaldos")
 
     companion object {
         val items = listOf(
             Dashboard, Inventory, Sales, Cash, Expenses,
-            Receivables, Shrinkage, Restock, Suppliers, Reports, Backup
+            Receivables, Shrinkage, Restock, Reports, Backup
         )
     }
 }
