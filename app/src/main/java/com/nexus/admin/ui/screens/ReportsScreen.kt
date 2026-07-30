@@ -103,14 +103,25 @@ fun ReportsScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Text("Reportes", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+        // Título
+        Text(
+            "Reportes",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(16.dp)
+        )
 
         // Selector de período
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("daily" to "Diario", "weekly" to "Semanal", "monthly" to "Mensual", "yearly" to "Anual").forEach { (period, label) ->
+            listOf(
+                "daily" to "Diario",
+                "weekly" to "Semanal",
+                "monthly" to "Mensual",
+                "yearly" to "Anual"
+            ).forEach { (period, label) ->
                 FilterChip(
                     selected = selectedPeriod == period,
                     onClick = { selectedPeriod = period },
@@ -132,61 +143,143 @@ fun ReportsScreen() {
                 }
             ) {
                 Icon(Icons.Filled.PictureAsPdf, null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(8.dp))
                 Text("Exportar PDF")
             }
         }
 
+        Spacer(Modifier.height(8.dp))
+
+        // Contenido del reporte
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // KPIs
+            // KPIs principales
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Resumen",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Card(Modifier.weight(1f)) {
                         Column(Modifier.padding(12.dp)) {
-                            Text("Ventas", style = MaterialTheme.typography.bodySmall, color = Gray500)
-                            Text("$${Utils.formatCurrency(totalSales)}", fontWeight = FontWeight.Bold, color = Green)
+                            Text("Ventas Totales", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                            Text(
+                                "$${Utils.formatCurrency(totalSales)}",
+                                fontWeight = FontWeight.Bold,
+                                color = Green,
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                     }
                     Card(Modifier.weight(1f)) {
                         Column(Modifier.padding(12.dp)) {
-                            Text("Ganancia", style = MaterialTheme.typography.bodySmall, color = Gray500)
-                            Text("$${Utils.formatCurrency(totalProfit)}", fontWeight = FontWeight.Bold, color = Blue)
+                            Text("Ganancia Neta", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                            Text(
+                                "$${Utils.formatCurrency(totalProfit)}",
+                                fontWeight = FontWeight.Bold,
+                                color = Blue,
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                     }
                 }
             }
 
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Card(Modifier.weight(1f)) {
                         Column(Modifier.padding(12.dp)) {
                             Text("Transacciones", style = MaterialTheme.typography.bodySmall, color = Gray500)
-                            Text("$transactions", fontWeight = FontWeight.Bold)
+                            Text(
+                                "$transactions",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                     }
                     Card(Modifier.weight(1f)) {
                         Column(Modifier.padding(12.dp)) {
                             Text("Ticket Promedio", style = MaterialTheme.typography.bodySmall, color = Gray500)
-                            Text("$${Utils.formatCurrency(avgTicket)}", fontWeight = FontWeight.Bold)
+                            Text(
+                                "$${Utils.formatCurrency(avgTicket)}",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Card(Modifier.weight(1f)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("Gastos Totales", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                            Text(
+                                "$${Utils.formatCurrency(totalExpenses)}",
+                                fontWeight = FontWeight.Bold,
+                                color = Red,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                    Card(Modifier.weight(1f)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("Balance Neto", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                            val balance = totalProfit - totalExpenses
+                            Text(
+                                "$${Utils.formatCurrency(balance)}",
+                                fontWeight = FontWeight.Bold,
+                                color = if (balance >= 0) Green else Red,
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                     }
                 }
             }
 
             // Métodos de pago
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("Ventas por Método de Pago", fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(8.dp))
-                        paymentMethods.forEach { (method, total) ->
-                            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(method)
-                                Text("$${Utils.formatCurrency(total)}", fontWeight = FontWeight.Medium)
+            if (paymentMethods.isNotEmpty()) {
+                item {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                "Ventas por Método de Pago",
+                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            paymentMethods.forEach { (method, total) ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(method, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        "$${Utils.formatCurrency(total)}",
+                                        fontWeight = FontWeight.Medium,
+                                        color = Green
+                                    )
+                                }
+                                if (method != paymentMethods.keys.last()) {
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                                }
                             }
                         }
                     }
@@ -194,50 +287,54 @@ fun ReportsScreen() {
             }
 
             // Top 10 Productos
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("Top 10 Productos", fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(8.dp))
-                        topProducts.forEachIndexed { index, (name, qty) ->
-                            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("${index + 1}. $name")
-                                Text("$qty unid.", fontWeight = FontWeight.Medium)
+            if (topProducts.isNotEmpty()) {
+                item {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                "Top 10 Productos Más Vendidos",
+                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            topProducts.forEachIndexed { index, (name, qty) ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            "${index + 1}.",
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.width(30.dp)
+                                        )
+                                        Text(name, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                    Text(
+                                        "$qty unid.",
+                                        fontWeight = FontWeight.Medium,
+                                        color = Blue
+                                    )
+                                }
+                                if (index < topProducts.size - 1) {
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // Resumen Financiero
+            // Espacio final
             item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("Resumen Financiero", fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(8.dp))
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Ingresos:"); Text("$${Utils.formatCurrency(totalSales)}")
-                        }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Gastos:"); Text("$${Utils.formatCurrency(totalExpenses)}")
-                        }
-                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Balance Neto:", fontWeight = FontWeight.Bold)
-                            Text(
-                                "$${Utils.formatCurrency(totalProfit - totalExpenses)}",
-                                fontWeight = FontWeight.Bold,
-                                color = if (totalProfit - totalExpenses >= 0) Green else Red
-                            )
-                        }
-                    }
-                }
+                Spacer(Modifier.height(32.dp))
             }
         }
     }
 }
 
-// ========== FUNCIÓN DE EXPORTACIÓN PDF ==========
+// ========== FUNCIÓN DE EXPORTACIÓN A PDF ==========
 
 suspend fun exportReportToPdf(
     context: Context,
@@ -259,7 +356,6 @@ suspend fun exportReportToPdf(
         val pdf = PdfDocument(writer)
         val document = Document(pdf)
 
-        // Título
         val periodName = when (period) {
             "daily" -> "Diario"
             "weekly" -> "Semanal"
@@ -267,80 +363,117 @@ suspend fun exportReportToPdf(
             else -> "Anual"
         }
 
-        document.add(Paragraph("NEXUS ADMIN - REPORTE $periodName".uppercase())
-            .setBold()
-            .setFontSize(18f)
-            .setTextAlignment(TextAlignment.CENTER))
-        document.add(Paragraph("Fecha: ${Utils.formatDate(System.currentTimeMillis())}")
-            .setFontSize(10f)
-            .setTextAlignment(TextAlignment.CENTER))
+        // Título principal
+        document.add(
+            Paragraph("NEXUS ADMIN - REPORTE $periodName".uppercase())
+                .setBold()
+                .setFontSize(18f)
+                .setTextAlignment(TextAlignment.CENTER)
+        )
+        document.add(
+            Paragraph("Fecha: ${Utils.formatDate(System.currentTimeMillis())}")
+                .setFontSize(10f)
+                .setTextAlignment(TextAlignment.CENTER)
+        )
         document.add(Paragraph("\n"))
 
-        // KPIs
-        document.add(Paragraph("RESUMEN").setBold().setFontSize(14f))
-        document.add(Paragraph("Ventas Totales: $${Utils.formatCurrency(totalSales)}"))
-        document.add(Paragraph("Ganancia Neta: $${Utils.formatCurrency(totalProfit)}"))
-        document.add(Paragraph("Transacciones: $transactions"))
-        document.add(Paragraph("Ticket Promedio: $${Utils.formatCurrency(avgTicket)}"))
-        document.add(Paragraph("Gastos Totales: $${Utils.formatCurrency(totalExpenses)}"))
-        document.add(Paragraph("Balance Neto: $${Utils.formatCurrency(totalProfit - totalExpenses)}"))
+        // Sección Resumen
+        document.add(
+            Paragraph("RESUMEN")
+                .setBold()
+                .setFontSize(14f)
+        )
+        document.add(Paragraph("Ventas Totales: $${Utils.formatCurrency(totalSales)}").setFontSize(11f))
+        document.add(Paragraph("Ganancia Neta: $${Utils.formatCurrency(totalProfit)}").setFontSize(11f))
+        document.add(Paragraph("Transacciones: $transactions").setFontSize(11f))
+        document.add(Paragraph("Ticket Promedio: $${Utils.formatCurrency(avgTicket)}").setFontSize(11f))
+        document.add(Paragraph("Gastos Totales: $${Utils.formatCurrency(totalExpenses)}").setFontSize(11f))
+        document.add(
+            Paragraph("Balance Neto: $${Utils.formatCurrency(totalProfit - totalExpenses)}")
+                .setFontSize(11f)
+                .setBold()
+        )
         document.add(Paragraph("\n"))
 
-        // Métodos de pago
+        // Sección Métodos de Pago
         if (paymentMethods.isNotEmpty()) {
-            document.add(Paragraph("VENTAS POR MÉTODO DE PAGO").setBold().setFontSize(14f))
-            val methodsTable = Table(2)
-            methodsTable.setWidth(UnitValue.createPercentValue(100))
-            methodsTable.addCell(Cell().add(Paragraph("Método").setBold()))
-            methodsTable.addCell(Cell().add(Paragraph("Total").setBold()))
+            document.add(
+                Paragraph("VENTAS POR MÉTODO DE PAGO")
+                    .setBold()
+                    .setFontSize(14f)
+            )
+            val methodsTable = Table(2f)
+            methodsTable.setWidth(UnitValue.createPercentValue(100f))
+            
+            // Encabezados de tabla
+            methodsTable.addCell(
+                Cell().add(
+                    Paragraph("Método")
+                        .setBold()
+                        .setFontSize(10f)
+                )
+            )
+            methodsTable.addCell(
+                Cell().add(
+                    Paragraph("Total")
+                        .setBold()
+                        .setFontSize(10f)
+                )
+            )
+            
+            // Datos
             paymentMethods.forEach { (method, total) ->
-                methodsTable.addCell(Cell().add(Paragraph(method)))
-                methodsTable.addCell(Cell().add(Paragraph("$${Utils.formatCurrency(total)}")))
+                methodsTable.addCell(Cell().add(Paragraph(method).setFontSize(10f)))
+                methodsTable.addCell(
+                    Cell().add(
+                        Paragraph("$${Utils.formatCurrency(total)}")
+                            .setFontSize(10f)
+                    )
+                )
             }
             document.add(methodsTable)
             document.add(Paragraph("\n"))
         }
 
-        // Top 10 Productos
+        // Sección Top 10 Productos
         if (topProducts.isNotEmpty()) {
-            document.add(Paragraph("TOP 10 PRODUCTOS").setBold().setFontSize(14f))
-            val productsTable = Table(3)
-            productsTable.setWidth(UnitValue.createPercentValue(100))
-            productsTable.addCell(Cell().add(Paragraph("#").setBold()))
-            productsTable.addCell(Cell().add(Paragraph("Producto").setBold()))
-            productsTable.addCell(Cell().add(Paragraph("Cantidad").setBold()))
+            document.add(
+                Paragraph("TOP 10 PRODUCTOS MÁS VENDIDOS")
+                    .setBold()
+                    .setFontSize(14f)
+            )
+            val productsTable = Table(3f)
+            productsTable.setWidth(UnitValue.createPercentValue(100f))
+            
+            // Encabezados
+            productsTable.addCell(
+                Cell().add(Paragraph("#").setBold().setFontSize(10f))
+            )
+            productsTable.addCell(
+                Cell().add(Paragraph("Producto").setBold().setFontSize(10f))
+            )
+            productsTable.addCell(
+                Cell().add(Paragraph("Cantidad Vendida").setBold().setFontSize(10f))
+            )
+            
+            // Datos
             topProducts.forEachIndexed { index, (name, qty) ->
-                productsTable.addCell(Cell().add(Paragraph("${index + 1}")))
-                productsTable.addCell(Cell().add(Paragraph(name)))
-                productsTable.addCell(Cell().add(Paragraph("$qty")))
+                productsTable.addCell(Cell().add(Paragraph("${index + 1}").setFontSize(10f)))
+                productsTable.addCell(Cell().add(Paragraph(name).setFontSize(10f)))
+                productsTable.addCell(Cell().add(Paragraph("$qty").setFontSize(10f)))
             }
             document.add(productsTable)
             document.add(Paragraph("\n"))
         }
 
-        // Últimas ventas
-        if (salesList.isNotEmpty()) {
-            document.add(Paragraph("ÚLTIMAS VENTAS").setBold().setFontSize(14f))
-            val salesTable = Table(4)
-            salesTable.setWidth(UnitValue.createPercentValue(100))
-            salesTable.addCell(Cell().add(Paragraph("Fecha").setBold()))
-            salesTable.addCell(Cell().add(Paragraph("Cliente").setBold()))
-            salesTable.addCell(Cell().add(Paragraph("Productos").setBold()))
-            salesTable.addCell(Cell().add(Paragraph("Total").setBold()))
-            salesList.take(20).forEach { sale ->
-                salesTable.addCell(Cell().add(Paragraph(Utils.formatDate(sale.date)).setFontSize(8f)))
-                salesTable.addCell(Cell().add(Paragraph(sale.client.ifEmpty { "General" }).setFontSize(8f)))
-                salesTable.addCell(Cell().add(Paragraph(sale.products.joinToString { "${it.name} x${it.quantity}" }).setFontSize(8f)))
-                salesTable.addCell(Cell().add(Paragraph("$${Utils.formatCurrency(sale.total)}").setFontSize(8f)))
-            }
-            document.add(salesTable)
-        }
-
         // Pie de página
         document.add(Paragraph("\n"))
-        document.add(Paragraph("Reporte generado por Nexus Admin v1.0")
-            .setFontSize(8f)
-            .setTextAlignment(TextAlignment.CENTER))
+        document.add(
+            Paragraph("Reporte generado por Nexus Admin v1.0 - ${Utils.formatDate(System.currentTimeMillis())}")
+                .setFontSize(8f)
+                .setTextAlignment(TextAlignment.CENTER)
+                .setItalic()
+        )
 
         document.close()
         outputStream.close()
