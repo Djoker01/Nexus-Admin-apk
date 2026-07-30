@@ -45,7 +45,6 @@ val navItems = listOf(
     NavItemData(Screen.Receivables, Icons.Outlined.People, Icons.Filled.People),
     NavItemData(Screen.Shrinkage, Icons.Outlined.Delete, Icons.Filled.Delete),
     NavItemData(Screen.Restock, Icons.Outlined.Refresh, Icons.Filled.Refresh),
-    NavItemData(Screen.Suppliers, Icons.Outlined.Business, Icons.Filled.Business),
     NavItemData(Screen.Reports, Icons.Outlined.Assessment, Icons.Filled.Assessment),
     NavItemData(Screen.Backup, Icons.Outlined.CloudDownload, Icons.Filled.CloudDownload)
 )
