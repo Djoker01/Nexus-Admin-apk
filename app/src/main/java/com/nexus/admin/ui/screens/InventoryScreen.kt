@@ -1,6 +1,5 @@
 package com.nexus.admin.ui.screens
 
-import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -23,12 +22,12 @@ import com.nexus.admin.ui.components.FloatingBarcodeScanner
 import com.nexus.admin.ui.theme.*
 import com.nexus.admin.utils.Utils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.InputStream
-import java.io.OutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -218,6 +217,11 @@ fun InventoryScreen() {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Gray500
                             )
+                            Text(
+                                "Ganancia: $${Utils.formatCurrency(product.price - product.cost)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Green
+                            )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (product.stock <= product.minStock && product.stock > 0) {
                                     Text("⚠️ Stock bajo", color = Yellow, style = MaterialTheme.typography.labelSmall)
@@ -252,12 +256,13 @@ fun InventoryScreen() {
             onBarcodeScanned = { barcode ->
                 searchQuery = barcode
                 showScanner = false
+                Toast.makeText(context, "🔍 Código: $barcode", Toast.LENGTH_SHORT).show()
             },
             onDismiss = { showScanner = false }
         )
     }
 
-    // Add/Edit Dialog (igual que antes, omitido por brevedad)
+    // Add/Edit Dialog
     if (showAddDialog) {
         var name by remember { mutableStateOf(editingProduct?.name ?: "") }
         var sku by remember { mutableStateOf(editingProduct?.sku ?: "") }
@@ -278,18 +283,28 @@ fun InventoryScreen() {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(sku, { sku = it }, label = { Text("SKU/Código") }, modifier = Modifier.weight(1f), singleLine = true)
                         FilledIconButton(onClick = { showSkuScanner = true }, modifier = Modifier.size(48.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = Blue)) {
-                            Icon(Icons.Filled.QrCodeScanner, "Escanear", tint = White, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Filled.QrCodeScanner, "Escanear SKU", tint = White, modifier = Modifier.size(22.dp))
                         }
                     }
                     
                     OutlinedTextField(category, { category = it }, label = { Text("Categoría") }, singleLine = true)
+                    
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(cost, { cost = it }, label = { Text("Costo") }, modifier = Modifier.weight(1f), singleLine = true, leadingIcon = { Text("$") })
                         OutlinedTextField(price, { price = it }, label = { Text("Precio") }, modifier = Modifier.weight(1f), singleLine = true, leadingIcon = { Text("$") })
                     }
+                    
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(stock, { stock = it }, label = { Text("Stock") }, modifier = Modifier.weight(1f), singleLine = true)
                         OutlinedTextField(minStock, { minStock = it }, label = { Text("Stock Mín") }, modifier = Modifier.weight(1f), singleLine = true)
+                    }
+
+                    val c = cost.toDoubleOrNull() ?: 0.0
+                    val p = price.toDoubleOrNull() ?: 0.0
+                    if (p > c) {
+                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = GreenLight)) {
+                            Text("Ganancia: $${Utils.formatCurrency(p - c)}", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold, color = GreenDark)
+                        }
                     }
                 }
             },
@@ -301,7 +316,13 @@ fun InventoryScreen() {
                             cost = cost.toDoubleOrNull() ?: 0.0, price = price.toDoubleOrNull() ?: 0.0,
                             stock = stock.toIntOrNull() ?: 0, minStock = minStock.toIntOrNull() ?: 5
                         )
-                        if (editingProduct != null) db.productDao().update(p) else db.productDao().insert(p)
+                        if (editingProduct != null) {
+                            db.productDao().update(p)
+                            Toast.makeText(context, "Producto actualizado", Toast.LENGTH_SHORT).show()
+                        } else {
+                            db.productDao().insert(p)
+                            Toast.makeText(context, "Producto creado", Toast.LENGTH_SHORT).show()
+                        }
                         showAddDialog = false; editingProduct = null
                     }
                 }) { Text("Guardar") }
@@ -318,7 +339,7 @@ fun InventoryScreen() {
     }
 }
 
-// ========== FUNCIONES DE EXPORTACIÓN/IMPORTACIÓN EXCEL ==========
+// ========== FUNCIÓN DE EXPORTACIÓN A EXCEL ==========
 
 suspend fun exportInventoryToExcel(context: android.content.Context, db: AppDatabase, uri: Uri) {
     try {
@@ -328,11 +349,13 @@ suspend fun exportInventoryToExcel(context: android.content.Context, db: AppData
 
         // Estilo para encabezados
         val headerStyle = workbook.createCellStyle().apply {
-            fillForegroundColor = org.apache.poi.hssf.util.HSSFColor.HSSFColorPredefined.DARK_BLUE.index.toShort()
-            setFont(workbook.createFont().apply {
+            val font = workbook.createFont().apply {
                 bold = true
-                color = org.apache.poi.hssf.util.HSSFColor.HSSFColorPredefined.WHITE.index.toShort()
-            })
+                color = org.apache.poi.ss.usermodel.IndexedColors.WHITE.index.toShort()
+            }
+            setFont(font)
+            fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.DARK_BLUE.index.toShort()
+            fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND
         }
 
         // Encabezados
@@ -371,14 +394,16 @@ suspend fun exportInventoryToExcel(context: android.content.Context, db: AppData
         workbook.close()
 
         withContext(Dispatchers.Main) {
-            Toast.makeText(context, "✅ Inventario exportado a Excel", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "✅ Inventario exportado a Excel (${products.size} productos)", Toast.LENGTH_SHORT).show()
         }
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
-            Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "❌ Error al exportar: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }
+
+// ========== FUNCIÓN DE IMPORTACIÓN DESDE EXCEL ==========
 
 suspend fun importInventoryFromExcel(context: android.content.Context, db: AppDatabase, uri: Uri) {
     try {
@@ -428,7 +453,11 @@ suspend fun importInventoryFromExcel(context: android.content.Context, db: AppDa
         inputStream.close()
 
         withContext(Dispatchers.Main) {
-            Toast.makeText(context, "✅ $imported productos importados${if (skipped > 0) " ($skipped omitidos)" else ""}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                "✅ $imported productos importados${if (skipped > 0) " ($skipped omitidos)" else ""}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
