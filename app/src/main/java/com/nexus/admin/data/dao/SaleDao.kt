@@ -24,6 +24,9 @@ interface SaleDao {
     @Insert
     suspend fun insert(sale: Sale): Long
 
+    @Update
+    suspend fun update(sale: Sale)   // ← AGREGAR ESTA LÍNEA
+
     @Delete
     suspend fun delete(sale: Sale)
 
