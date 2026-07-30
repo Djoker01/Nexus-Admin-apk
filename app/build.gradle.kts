@@ -79,4 +79,12 @@ dependencies {
     
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    
+    // Apache POI para Excel
+    implementation("org.apache.poi:poi:5.2.5")
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
+    
+    // iText para PDF
+    implementation("com.itextpdf:itext7-core:7.2.5")
 }
+
