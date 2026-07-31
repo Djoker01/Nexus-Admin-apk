@@ -144,23 +144,75 @@ fun InventoryScreen(isAdmin: Boolean = true) {
 suspend fun exportToExcel(context: android.content.Context, db: AppDatabase, uri: Uri) {
     try {
         val products = db.productDao().getAllProductsOnce()
-        if (products.isEmpty()) { withContext(Dispatchers.Main) { Toast.makeText(context, "⚠️ No hay productos", Toast.LENGTH_SHORT).show() }; return }
-        val wb = XSSFWorkbook(); val sheet = wb.createSheet("Inventario")
-        val hf = wb.createFont().apply { bold = true; color = IndexedColors.WHITE.index.toShort(); fontHeightInPoints = 12 }
-        val hs = wb.createCellStyle().apply { setFont(hf); fillForegroundColor = IndexedColors.DARK_BLUE.index.toShort(); fillPattern = FillPatternType.SOLID_FOREGROUND; alignment = HorizontalAlignment.CENTER }
-        val ds = wb.createCellStyle().apply { setFont(wb.createFont().apply { fontHeightInPoints = 11 }) }
-        val headers = arrayOf("ID", "Nombre", "SKU", "Categoría", "Costo", "Precio", "Stock", "Stock Mín", "Ganancia", "Margen %")
-        val hr = sheet.createRow(0); headers.forEachIndexed { i, h -> val c = hr.createCell(i); c.setCellValue(h); c.cellStyle = hs }
-        products.forEachIndexed { ri, p ->
-            val r = sheet.createRow(ri + 1); val m = if (p.cost > 0) ((p.price - p.cost) / p.cost * 100) else 0.0
-            r.createCell(0).apply { setCellValue(p.id.toDouble()); cellStyle = ds }; r.createCell(1).apply { setCellValue(p.name); cellStyle = ds }; r.createCell(2).apply { setCellValue(p.sku); cellStyle = ds }; r.createCell(3).apply { setCellValue(p.category); cellStyle = ds }
-            r.createCell(4).apply { setCellValue(p.cost); cellStyle = ds }; r.createCell(5).apply { setCellValue(p.price); cellStyle = ds }; r.createCell(6).apply { setCellValue(p.stock.toDouble()); cellStyle = ds }; r.createCell(7).apply { setCellValue(p.minStock.toDouble()); cellStyle = ds }
-            r.createCell(8).apply { setCellValue(p.price - p.cost); cellStyle = ds }; r.createCell(9).apply { setCellValue(m); cellStyle = ds }
+        
+        if (products.isEmpty()) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "⚠️ No hay productos para exportar", Toast.LENGTH_SHORT).show()
+            }
+            return
         }
-        for (i in 0..9) sheet.autoSizeColumn(i); sheet.createFreezePane(0, 1)
-        val os = context.contentResolver.openOutputStream(uri); if (os != null) { wb.write(os); os.flush(); os.close() }; wb.close()
-        withContext(Dispatchers.Main) { Toast.makeText(context, "✅ Exportado: ${products.size} productos", Toast.LENGTH_SHORT).show() }
-    } catch (e: Exception) { e.printStackTrace(); withContext(Dispatchers.Main) { Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show() } }
+        
+        val wb = XSSFWorkbook()
+        val sheet = wb.createSheet("Inventario")
+        
+        val headerFont = wb.createFont().apply {
+            bold = true
+            color = IndexedColors.WHITE.index.toShort()
+            fontHeightInPoints = 12
+        }
+        val headerStyle = wb.createCellStyle().apply {
+            setFont(headerFont)
+            fillForegroundColor = IndexedColors.DARK_BLUE.index.toShort()
+            fillPattern = FillPatternType.SOLID_FOREGROUND
+            alignment = HorizontalAlignment.CENTER
+        }
+        val dataStyle = wb.createCellStyle().apply {
+            setFont(wb.createFont().apply { fontHeightInPoints = 11 })
+        }
+        
+        val headers = arrayOf("ID", "Nombre", "SKU", "Categoría", "Costo", "Precio", "Stock", "Stock Mín", "Ganancia", "Margen %")
+        val headerRow = sheet.createRow(0)
+        headers.forEachIndexed { i, h -> val c = headerRow.createCell(i); c.setCellValue(h); c.cellStyle = headerStyle }
+        
+        products.forEachIndexed { ri, p ->
+            val row = sheet.createRow(ri + 1)
+            val margin = if (p.cost > 0) ((p.price - p.cost) / p.cost * 100) else 0.0
+            row.createCell(0).apply { setCellValue(p.id.toDouble()); cellStyle = dataStyle }
+            row.createCell(1).apply { setCellValue(p.name); cellStyle = dataStyle }
+            row.createCell(2).apply { setCellValue(p.sku); cellStyle = dataStyle }
+            row.createCell(3).apply { setCellValue(p.category); cellStyle = dataStyle }
+            row.createCell(4).apply { setCellValue(p.cost); cellStyle = dataStyle }
+            row.createCell(5).apply { setCellValue(p.price); cellStyle = dataStyle }
+            row.createCell(6).apply { setCellValue(p.stock.toDouble()); cellStyle = dataStyle }
+            row.createCell(7).apply { setCellValue(p.minStock.toDouble()); cellStyle = dataStyle }
+            row.createCell(8).apply { setCellValue(p.price - p.cost); cellStyle = dataStyle }
+            row.createCell(9).apply { setCellValue(margin); cellStyle = dataStyle }
+        }
+        
+        for (i in 0..9) sheet.autoSizeColumn(i)
+        sheet.createFreezePane(0, 1)
+        
+        // CORREGIDO: Manejar correctamente el OutputStream
+        val outputStream = context.contentResolver.openOutputStream(uri)
+        if (outputStream != null) {
+            try {
+                wb.write(outputStream)
+                outputStream.flush()
+            } finally {
+                outputStream.close()
+                wb.close()
+            }
+        }
+        
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, "✅ Exportado: ${products.size} productos", Toast.LENGTH_SHORT).show()
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
 }
 
 suspend fun importFromExcel(context: android.content.Context, db: AppDatabase, uri: Uri) {
