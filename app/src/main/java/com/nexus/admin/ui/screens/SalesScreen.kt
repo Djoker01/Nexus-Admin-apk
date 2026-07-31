@@ -62,7 +62,6 @@ fun SalesScreen() {
             }
         }
 
-        // Solo ventas del día (sin ganancias para trabajador)
         Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Column(Modifier.padding(12.dp)) {
                 Text("Ventas Hoy", style = MaterialTheme.typography.bodySmall, color = Gray500)
@@ -159,7 +158,6 @@ fun SalesScreen() {
                             Button(onClick = { showScanner = true }, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.QrCodeScanner, null, modifier = Modifier.size(18.dp)); Text("Escanear") }
                         }
                     }
-                    // PAGO COMBINADO
                     if (editingSale == null && !isReturned && selectedProducts.isNotEmpty()) {
                         HorizontalDivider()
                         Text("Métodos de pago:", fontWeight = FontWeight.SemiBold)
@@ -184,7 +182,6 @@ fun SalesScreen() {
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
-                        // DEVOLUCIÓN
                         if (isReturned && editingSale != null) {
                             val original = editingSale!!
                             val returnSale = Sale(client = original.client, products = original.products, total = -original.total, cost = -original.cost, paymentMethod = "Devolución", paymentMethods = "Devolución", isReceivable = false, isReturned = true)
@@ -193,9 +190,7 @@ fun SalesScreen() {
                             original.products.forEach { sp -> val product = allProducts.find { it.id == sp.productId }; if (product != null) db.productDao().update(product.copy(stock = product.stock + sp.quantity)) }
                             db.cashMovementDao().insert(CashMovement(type = "Egreso", amount = original.total, description = "Devolución venta #${original.id}", date = System.currentTimeMillis()))
                             Toast.makeText(context, "✅ Devolución registrada", Toast.LENGTH_SHORT).show()
-                        }
-                        // NUEVA VENTA
-                        else if (editingSale == null && selectedProducts.isNotEmpty()) {
+                        } else if (editingSale == null && selectedProducts.isNotEmpty()) {
                             val productsList = selectedProducts.values.map { (p, q) -> SaleProduct(p.id, p.name, q, p.price, p.cost) }
                             val totalAmount = productsList.sumOf { it.price * it.quantity }
                             val totalCost = productsList.sumOf { it.cost * it.quantity }
@@ -210,14 +205,12 @@ fun SalesScreen() {
                             db.saleDao().insert(sale)
                             selectedProducts.values.forEach { (product, qty) -> db.productDao().update(product.copy(stock = product.stock - qty)) }
 
-                            // CORREGIDO: SIEMPRE registrar en caja (efectivo Y transferencia)
                             if (!isReceivable) {
-                                if (cashAmt > 0) db.cashMovementDao().insert(CashMovement(type = "Ingreso", amount = cashAmt, description = "Venta efectivo - ${productsList.size} productos", date = System.currentTimeMillis()))
-                                if (transferAmt > 0) db.cashMovementDao().insert(CashMovement(type = "Ingreso", amount = transferAmt, description = "Venta transferencia - ${productsList.size} productos", date = System.currentTimeMillis()))
+                                if (cashAmt > 0) db.cashMovementDao().insert(CashMovement(type = "Ingreso", amount = cashAmt, description = "Venta efectivo", date = System.currentTimeMillis()))
+                                if (transferAmt > 0) db.cashMovementDao().insert(CashMovement(type = "Ingreso", amount = transferAmt, description = "Venta transferencia", date = System.currentTimeMillis()))
                             }
-                            // Si es cuenta por cobrar, NO registrar en caja
                             if (isReceivable && combinedTotal < totalAmount) {
-                                db.receivableDao().insert(Receivable(clientName = client, concept = "Venta - ${productsList.size} productos", totalAmount = totalAmount - combinedTotal, balance = totalAmount - combinedTotal, status = "pending"))
+                                db.receivableDao().insert(Receivable(clientName = client, concept = "Venta crédito", totalAmount = totalAmount - combinedTotal, balance = totalAmount - combinedTotal, status = "pending"))
                             }
                             Toast.makeText(context, "✅ Venta registrada", Toast.LENGTH_SHORT).show()
                         }
@@ -230,7 +223,56 @@ fun SalesScreen() {
             dismissButton = { TextButton(onClick = { showSaleDialog = false; editingSale = null }) { Text("Cancelar") } }
         )
 
-        if (showScanner) { FloatingBarcodeScanner(onBarcodeScanned = { barcode -> scope.launch { val prods = db.productDao().getAllProducts().first(); prods.find { it.sku == barcode }?.let { p -> if (p.stock > 0 && !selectedProducts.containsKey(p.id)) selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 } } }; showScanner = false }, onDismiss = { showScanner = false }) }
-        if (showProductPicker) { var s by remember { mutableStateOf("") }; AlertDialog(onDismissRequest = { showProductPicker = false }, title = { Text("Productos") }, text = { Column { OutlinedTextField(s, { s = it }, label = { Text("Buscar") }, singleLine = true, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(8.dp)); LazyColumn(Modifier.heightIn(max = 400.dp)) { items(allProducts.filter { s.isEmpty() || it.name.contains(s, true) || it.sku.contains(s, true) }) { p -> ListItem(headlineContent = { Text(p.name) }, supportingContent = { Text("Stock: ${p.stock} | $${Utils.formatCurrency(p.price)}") }, modifier = Modifier.clickable { if (p.stock > 0 && !selectedProducts.containsKey(p.id)) { selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 }; showProductPicker = false } }) } } }, confirmButton = { TextButton(onClick = { showProductPicker = false }) { Text("Listo") } }) }
+        // Escáner
+        if (showScanner) {
+            FloatingBarcodeScanner(
+                onBarcodeScanned = { barcode ->
+                    scope.launch {
+                        val prods = db.productDao().getAllProducts().first()
+                        prods.find { it.sku == barcode }?.let { p ->
+                            if (p.stock > 0 && !selectedProducts.containsKey(p.id)) {
+                                selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 }
+                            }
+                        }
+                    }
+                    showScanner = false
+                },
+                onDismiss = { showScanner = false }
+            )
+        }
+
+        // Selector de productos
+        if (showProductPicker) {
+            var searchProd by remember { mutableStateOf("") }
+            val filtered = remember(allProducts, searchProd) {
+                if (searchProd.isEmpty()) allProducts
+                else allProducts.filter { it.name.contains(searchProd, true) || it.sku.contains(searchProd, true) }
+            }
+            AlertDialog(
+                onDismissRequest = { showProductPicker = false },
+                title = { Text("Seleccionar Producto") },
+                text = {
+                    Column {
+                        OutlinedTextField(searchProd, { searchProd = it }, label = { Text("Buscar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(8.dp))
+                        LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                            items(filtered) { p ->
+                                ListItem(
+                                    headlineContent = { Text(p.name) },
+                                    supportingContent = { Text("Stock: ${p.stock} | $${Utils.formatCurrency(p.price)}") },
+                                    modifier = Modifier.clickable {
+                                        if (p.stock > 0 && !selectedProducts.containsKey(p.id)) {
+                                            selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 }
+                                            showProductPicker = false
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showProductPicker = false }) { Text("Listo") } }
+            )
+        }
     }
 }
