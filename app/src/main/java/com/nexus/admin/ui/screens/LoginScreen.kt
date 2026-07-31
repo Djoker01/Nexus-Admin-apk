@@ -31,11 +31,13 @@ fun LoginScreen(
     var isLoading by remember { mutableStateOf(false) }
     var showChangePin by remember { mutableStateOf(false) }
     var attempts by remember { mutableIntStateOf(0) }
+    var showCreateAdminDialog by remember { mutableStateOf(false) }
 
+    // Verificar si es primera instalación (no hay admin)
     LaunchedEffect(Unit) {
         val admin = db.userDao().getAdmin()
         if (admin == null) {
-            db.userDao().insert(User(name = "Admin", pin = "0000", role = "admin"))
+            showCreateAdminDialog = true
         }
     }
 
@@ -94,36 +96,81 @@ fun LoginScreen(
         TextButton(onClick = { showChangePin = true }) { Text("Cambiar mi PIN") }
     }
 
-    // Diálogo para cambiar PIN
+    // Diálogo: Crear Administrador (primera instalación)
+    if (showCreateAdminDialog) {
+        var adminName by remember { mutableStateOf("") }
+        var adminPin by remember { mutableStateOf("") }
+        var confirmPin by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Configuración Inicial") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Bienvenido a Nexus Admin. Crea tu cuenta de Administrador:", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(adminName, { adminName = it }, label = { Text("Tu nombre *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    HorizontalDivider()
+                    Text("Crea tu PIN de acceso:", fontWeight = FontWeight.SemiBold)
+                    OutlinedTextField(adminPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) adminPin = it }, label = { Text("PIN (4 dígitos) *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth(), isError = confirmPin.isNotEmpty() && adminPin != confirmPin)
+                    if (confirmPin.isNotEmpty() && adminPin != confirmPin) Text("Los PIN no coinciden", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                        Text("🔐 Guarda bien tu PIN. Es la llave de acceso como Administrador.", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        if (adminName.isNotBlank() && adminPin.length == 4 && adminPin == confirmPin) {
+                            db.userDao().insert(User(name = adminName, pin = adminPin, role = "admin"))
+                            showCreateAdminDialog = false
+                            Toast.makeText(context, "✅ Administrador creado. Ingresa con tu PIN", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "❌ Completa todos los campos correctamente", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }) { Text("Crear Administrador") }
+            },
+            dismissButton = null
+        )
+    }
+
+    // Diálogo: Cambiar PIN
     if (showChangePin) {
         var currentPin by remember { mutableStateOf("") }
         var newPin by remember { mutableStateOf("") }
-        var confirmPin by remember { mutableStateOf("") }
+        var confirmNewPin by remember { mutableStateOf("") }
 
         AlertDialog(
             onDismissRequest = { showChangePin = false },
             title = { Text("Cambiar PIN") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(currentPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) currentPin = it }, label = { Text("PIN actual") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    OutlinedTextField(currentPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) currentPin = it }, label = { Text("PIN actual") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
                     HorizontalDivider()
-                    OutlinedTextField(newPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) newPin = it }, label = { Text("Nuevo PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
-                    OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    OutlinedTextField(newPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) newPin = it }, label = { Text("Nuevo PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+                    OutlinedTextField(confirmNewPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmNewPin = it }, label = { Text("Confirmar nuevo PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
                         val user = db.userDao().getUserByPin(currentPin)
-                        if (user != null && newPin.length == 4 && newPin == confirmPin) {
+                        if (user != null && newPin.length == 4 && newPin == confirmNewPin) {
+                            val existingPin = db.userDao().getUserByPin(newPin)
+                            if (existingPin != null && existingPin.id != user.id) {
+                                Toast.makeText(context, "❌ Ese PIN ya está en uso", Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
                             db.userDao().update(user.copy(pin = newPin))
                             showChangePin = false
-                            Toast.makeText(context, "✅ PIN actualizado", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "✅ PIN actualizado correctamente", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "❌ Verifique los datos", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "❌ Verifique los datos ingresados", Toast.LENGTH_SHORT).show()
                         }
                     }
-                }) { Text("Cambiar") }
+                }) { Text("Cambiar PIN") }
             },
             dismissButton = { TextButton(onClick = { showChangePin = false }) { Text("Cancelar") } }
         )
