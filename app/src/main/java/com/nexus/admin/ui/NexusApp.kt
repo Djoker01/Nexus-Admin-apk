@@ -2,7 +2,8 @@ package com.nexus.admin.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
-import com.nexus.admin.utils.QrCodeGeneratorimport android.widget.Toast
+import com.nexus.admin.utils.QrCodeGenerator
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
