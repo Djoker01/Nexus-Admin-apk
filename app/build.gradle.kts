@@ -77,8 +77,8 @@ dependencies {
     implementation("androidx.camera:camera-view:$cameraxVersion")
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
     
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // ZXing para generar QR
+    implementation("com.google.zxing:core:3.5.3")
     
     // Apache POI para Excel
     implementation("org.apache.poi:poi:5.2.5")
@@ -86,5 +86,7 @@ dependencies {
     
     // iText para PDF
     implementation("com.itextpdf:itext7-core:7.2.5")
+    
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
-
