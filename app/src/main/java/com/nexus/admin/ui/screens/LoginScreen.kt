@@ -29,6 +29,8 @@ fun LoginScreen(
     val scope = rememberCoroutineScope()
     var pin by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    var showChangePin by remember { mutableStateOf(false) }
+    var attempts by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         val admin = db.userDao().getAdmin()
@@ -45,7 +47,6 @@ fun LoginScreen(
         Icon(Icons.Filled.Storefront, null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(16.dp))
         Text("Nexus Admin", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Text("Sistema de administración", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Ingrese su PIN para acceder", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
 
         Spacer(Modifier.height(32.dp))
@@ -69,9 +70,12 @@ fun LoginScreen(
                     isLoading = true
                     val user = db.userDao().getUserByPin(pin)
                     if (user != null) {
+                        attempts = 0
                         onLoginSuccess(user)
                     } else {
-                        Toast.makeText(context, "❌ PIN incorrecto", Toast.LENGTH_SHORT).show()
+                        attempts++
+                        Toast.makeText(context, "❌ PIN incorrecto (Intento $attempts)", Toast.LENGTH_SHORT).show()
+                        pin = ""
                     }
                     isLoading = false
                 }
@@ -79,14 +83,49 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth().height(50.dp),
             enabled = pin.length == 4 && !isLoading
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-            } else {
-                Icon(Icons.Filled.Login, null); Spacer(Modifier.width(8.dp)); Text("Ingresar")
-            }
+            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+            else { Icon(Icons.Filled.Login, null); Spacer(Modifier.width(8.dp)); Text("Ingresar") }
         }
 
         Spacer(Modifier.height(16.dp))
         TextButton(onClick = onFirstTimeSetup) { Text("Configurar usuarios") }
+
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = { showChangePin = true }) { Text("Cambiar mi PIN") }
+    }
+
+    // Diálogo para cambiar PIN
+    if (showChangePin) {
+        var currentPin by remember { mutableStateOf("") }
+        var newPin by remember { mutableStateOf("") }
+        var confirmPin by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showChangePin = false },
+            title = { Text("Cambiar PIN") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(currentPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) currentPin = it }, label = { Text("PIN actual") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    HorizontalDivider()
+                    OutlinedTextField(newPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) newPin = it }, label = { Text("Nuevo PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        val user = db.userDao().getUserByPin(currentPin)
+                        if (user != null && newPin.length == 4 && newPin == confirmPin) {
+                            db.userDao().update(user.copy(pin = newPin))
+                            showChangePin = false
+                            Toast.makeText(context, "✅ PIN actualizado", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "❌ Verifique los datos", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }) { Text("Cambiar") }
+            },
+            dismissButton = { TextButton(onClick = { showChangePin = false }) { Text("Cancelar") } }
+        )
     }
 }
