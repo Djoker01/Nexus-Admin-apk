@@ -1,5 +1,8 @@
 package com.nexus.admin.ui.screens
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import com.nexus.admin.utils.QrCodeGenerator
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
