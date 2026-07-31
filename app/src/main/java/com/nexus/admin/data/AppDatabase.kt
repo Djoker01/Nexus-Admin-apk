@@ -10,19 +10,12 @@ import com.nexus.admin.data.entity.*
 
 @Database(
     entities = [
-        Product::class,
-        Sale::class,
-        CashMovement::class,
-        Expense::class,
-        Client::class,
-        Receivable::class,
-        Shrinkage::class,
-        Restock::class,
-        Supplier::class,
-        Quote::class,
-        AppNotification::class
+        Product::class, Sale::class, CashMovement::class, Expense::class,
+        Client::class, Receivable::class, Shrinkage::class, Restock::class,
+        Supplier::class, Quote::class, AppNotification::class,
+        User::class, Business::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -38,6 +31,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun supplierDao(): SupplierDao
     abstract fun quoteDao(): QuoteDao
     abstract fun notificationDao(): NotificationDao
+    abstract fun userDao(): UserDao
+    abstract fun businessDao(): BusinessDao
 
     companion object {
         @Volatile
