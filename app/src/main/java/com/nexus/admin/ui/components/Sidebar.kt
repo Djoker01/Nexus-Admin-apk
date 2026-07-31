@@ -44,9 +44,15 @@ val navItems = listOf(
     NavItemData(Screen.Expenses, Icons.Outlined.TrendingDown, Icons.Filled.TrendingDown),
     NavItemData(Screen.Receivables, Icons.Outlined.People, Icons.Filled.People),
     NavItemData(Screen.Shrinkage, Icons.Outlined.Delete, Icons.Filled.Delete),
-    NavItemData(Screen.Restock, Icons.Outlined.Refresh, Icons.Filled.Refresh),
     NavItemData(Screen.Reports, Icons.Outlined.Assessment, Icons.Filled.Assessment),
     NavItemData(Screen.Backup, Icons.Outlined.CloudDownload, Icons.Filled.CloudDownload)
+)
+
+// Items visibles para trabajadores
+val workerNavItems = listOf(
+    NavItemData(Screen.Dashboard, Icons.Outlined.Dashboard, Icons.Filled.Dashboard),
+    NavItemData(Screen.Inventory, Icons.Outlined.Inventory, Icons.Filled.Inventory),
+    NavItemData(Screen.Sales, Icons.Outlined.ShoppingCart, Icons.Filled.ShoppingCart)
 )
 
 @Composable
@@ -56,6 +62,7 @@ fun Sidebar(
     isExpanded: Boolean,
     onToggle: () -> Unit,
     onClose: () -> Unit,
+    isAdmin: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val animatedWidth: Dp by animateDpAsState(
@@ -63,6 +70,9 @@ fun Sidebar(
         animationSpec = tween(durationMillis = 300),
         label = "sidebar_width"
     )
+
+    // Filtrar items según rol
+    val displayItems = if (isAdmin) navItems else workerNavItems
 
     Surface(
         modifier = modifier
@@ -72,7 +82,7 @@ fun Sidebar(
         color = MaterialTheme.colorScheme.surface
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header con logo y toggle
+            // Header
             if (isExpanded) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -80,11 +90,11 @@ fun Sidebar(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Nexus", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Nexus", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text("Admin", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Green)
                     }
                     IconButton(onClick = onToggle, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Filled.MenuOpen, "Colapsar", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Filled.MenuOpen, "Colapsar", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                     }
                 }
             } else {
@@ -99,19 +109,22 @@ fun Sidebar(
 
             // Navigation items
             LazyColumn(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
-                items(navItems) { item ->
+                items(displayItems) { item ->
                     val isSelected = selectedItem == item.screen
                     val bgColor by animateColorAsState(
                         targetValue = if (isSelected) Green.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
-                        animationSpec = tween(200)
+                        animationSpec = tween(200),
+                        label = "nav_bg"
                     )
                     val contentColor by animateColorAsState(
                         targetValue = if (isSelected) Green else MaterialTheme.colorScheme.onSurfaceVariant,
-                        animationSpec = tween(200)
+                        animationSpec = tween(200),
+                        label = "nav_content"
                     )
 
                     Row(
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .background(bgColor)
                             .clickable {
@@ -130,29 +143,36 @@ fun Sidebar(
                                 modifier = Modifier.size(24.dp)
                             )
                         }
+
                         AnimatedVisibility(
                             visible = isExpanded,
                             enter = fadeIn(tween(200)) + slideInHorizontally(tween(200)) { -20 },
                             exit = fadeOut(tween(200)) + slideOutHorizontally(tween(200)) { -20 }
                         ) {
-                            Text(
-                                item.screen.title,
-                                modifier = Modifier.padding(start = 12.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = contentColor,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Row {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    item.screen.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = contentColor,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }
             }
 
+            // Footer
             if (isExpanded) {
                 HorizontalDivider()
                 Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    Text("v1.0", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("v1.0", style = MaterialTheme.typography.bodySmall, color = Gray500)
+                        Text(if (isAdmin) "Administrador" else "Trabajador", style = MaterialTheme.typography.labelSmall, color = if (isAdmin) Green else Blue)
+                    }
                 }
             }
         }
