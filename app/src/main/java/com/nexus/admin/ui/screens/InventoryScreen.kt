@@ -24,10 +24,7 @@ import com.nexus.admin.utils.Utils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.apache.poi.ss.usermodel.FillPatternType
-import org.apache.poi.ss.usermodel.HorizontalAlignment
-import org.apache.poi.ss.usermodel.IndexedColors
-import org.apache.poi.ss.usermodel.WorkbookFactory
+import org.apache.poi.ss.usermodel.*
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,67 +100,92 @@ fun InventoryScreen() {
         var cost by remember { mutableStateOf(editingProduct?.cost?.toString() ?: "") }; var price by remember { mutableStateOf(editingProduct?.price?.toString() ?: "") }
         var stock by remember { mutableStateOf(editingProduct?.stock?.toString() ?: "0") }; var minStock by remember { mutableStateOf(editingProduct?.minStock?.toString() ?: "5") }
         var showSkuScanner by remember { mutableStateOf(false) }
+        val c = cost.toDoubleOrNull() ?: 0.0; val p = price.toDoubleOrNull() ?: 0.0; val margin = if (c > 0) ((p - c) / c * 100) else 0.0
 
-        val c = cost.toDoubleOrNull() ?: 0.0; val p = price.toDoubleOrNull() ?: 0.0
-        val margin = if (c > 0) ((p - c) / c * 100) else 0.0
-
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false; editingProduct = null },
-            title = { Text(if (editingProduct != null) "Editar Producto" else "Nuevo Producto") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("Nombre *") }, singleLine = true)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(sku, { sku = it }, label = { Text("SKU") }, modifier = Modifier.weight(1f), singleLine = true); FilledIconButton(onClick = { showSkuScanner = true }, modifier = Modifier.size(48.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = Blue)) { Icon(Icons.Filled.QrCodeScanner, "Escanear", tint = White, modifier = Modifier.size(22.dp)) } }
-                    OutlinedTextField(category, { category = it }, label = { Text("Categoría") }, singleLine = true)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(cost, { cost = it }, label = { Text("Costo") }, modifier = Modifier.weight(1f), singleLine = true, leadingIcon = { Text("$") }); OutlinedTextField(price, { price = it }, label = { Text("Precio") }, modifier = Modifier.weight(1f), singleLine = true, leadingIcon = { Text("$") }) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(stock, { stock = it }, label = { Text("Stock") }, modifier = Modifier.weight(1f), singleLine = true); OutlinedTextField(minStock, { minStock = it }, label = { Text("Stock Mín") }, modifier = Modifier.weight(1f), singleLine = true) }
-                    // MARGEN EN PORCENTAJE
-                    if (p > c) {
-                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = GreenLight)) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text("💰 Ganancia: $${Utils.formatCurrency(p - c)} por unidad", fontWeight = FontWeight.Bold, color = GreenDark)
-                                Text("📊 Margen: ${String.format("%.1f", margin)}%", color = GreenDark, style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { Button(onClick = { scope.launch { val prod = Product(id = editingProduct?.id ?: 0, name = name, sku = sku, category = category, cost = c, price = p, stock = stock.toIntOrNull() ?: 0, minStock = minStock.toIntOrNull() ?: 5); if (editingProduct != null) db.productDao().update(prod) else db.productDao().insert(prod); showAddDialog = false; editingProduct = null } }) { Text("Guardar") } },
-            dismissButton = { TextButton(onClick = { showAddDialog = false; editingProduct = null }) { Text("Cancelar") } }
-        )
+        AlertDialog(onDismissRequest = { showAddDialog = false; editingProduct = null }, title = { Text(if (editingProduct != null) "Editar" else "Nuevo Producto") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Nombre *") }, singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(sku, { sku = it }, label = { Text("SKU") }, modifier = Modifier.weight(1f), singleLine = true); FilledIconButton(onClick = { showSkuScanner = true }, modifier = Modifier.size(48.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = Blue)) { Icon(Icons.Filled.QrCodeScanner, "Escanear", tint = White, modifier = Modifier.size(22.dp)) } }
+                OutlinedTextField(category, { category = it }, label = { Text("Categoría") }, singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(cost, { cost = it }, label = { Text("Costo") }, modifier = Modifier.weight(1f), singleLine = true, leadingIcon = { Text("$") }); OutlinedTextField(price, { price = it }, label = { Text("Precio") }, modifier = Modifier.weight(1f), singleLine = true, leadingIcon = { Text("$") }) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(stock, { stock = it }, label = { Text("Stock") }, modifier = Modifier.weight(1f), singleLine = true); OutlinedTextField(minStock, { minStock = it }, label = { Text("Stock Mín") }, modifier = Modifier.weight(1f), singleLine = true) }
+                if (p > c) { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = GreenLight)) { Column(Modifier.padding(12.dp)) { Text("💰 Ganancia: $${Utils.formatCurrency(p - c)}", fontWeight = FontWeight.Bold, color = GreenDark); Text("📊 Margen: ${String.format("%.1f", margin)}%", color = GreenDark) } } }
+            }
+        }, confirmButton = { Button(onClick = { scope.launch { val prod = Product(id = editingProduct?.id ?: 0, name = name, sku = sku, category = category, cost = c, price = p, stock = stock.toIntOrNull() ?: 0, minStock = minStock.toIntOrNull() ?: 5); if (editingProduct != null) db.productDao().update(prod) else db.productDao().insert(prod); showAddDialog = false; editingProduct = null } }) { Text("Guardar") } }, dismissButton = { TextButton(onClick = { showAddDialog = false; editingProduct = null }) { Text("Cancelar") } })
         if (showSkuScanner) { FloatingBarcodeScanner(onBarcodeScanned = { sku = it; showSkuScanner = false }, onDismiss = { showSkuScanner = false }) }
     }
 }
 
-// ========== EXPORTAR EXCEL (CORREGIDO) ==========
+// ========== EXPORTAR EXCEL (CORREGIDO - NO VACÍO) ==========
 suspend fun exportToExcel(context: android.content.Context, db: AppDatabase, uri: Uri) {
     try {
         val products = db.productDao().getAllProductsOnce()
-        if (products.isEmpty()) { withContext(Dispatchers.Main) { Toast.makeText(context, "⚠️ No hay productos", Toast.LENGTH_SHORT).show() }; return }
-        val wb = XSSFWorkbook(); val sheet = wb.createSheet("Inventario")
-        val hf = wb.createFont().apply { bold = true; color = IndexedColors.WHITE.index.toShort(); fontHeightInPoints = 12 }
-        val hs = wb.createCellStyle().apply { setFont(hf); fillForegroundColor = IndexedColors.DARK_BLUE.index.toShort(); fillPattern = FillPatternType.SOLID_FOREGROUND; alignment = HorizontalAlignment.CENTER }
-        val ds = wb.createCellStyle().apply { setFont(wb.createFont().apply { fontHeightInPoints = 11 }) }
+        if (products.isEmpty()) { withContext(Dispatchers.Main) { Toast.makeText(context, "⚠️ No hay productos para exportar", Toast.LENGTH_SHORT).show() }; return }
+        
+        val wb = XSSFWorkbook()
+        val sheet = wb.createSheet("Inventario")
+        
+        // Estilos
+        val headerFont = wb.createFont().apply { bold = true; color = IndexedColors.WHITE.index.toShort(); fontHeightInPoints = 12 }
+        val headerStyle = wb.createCellStyle().apply { setFont(headerFont); fillForegroundColor = IndexedColors.DARK_BLUE.index.toShort(); fillPattern = FillPatternType.SOLID_FOREGROUND; alignment = HorizontalAlignment.CENTER }
+        val dataStyle = wb.createCellStyle().apply { setFont(wb.createFont().apply { fontHeightInPoints = 11 }) }
+        
+        // Encabezados
         val headers = arrayOf("ID", "Nombre", "SKU", "Categoría", "Costo", "Precio", "Stock", "Stock Mín", "Ganancia", "Margen %")
-        val hr = sheet.createRow(0); headers.forEachIndexed { i, h -> val c = hr.createCell(i); c.setCellValue(h); c.cellStyle = hs }
+        val headerRow = sheet.createRow(0)
+        headers.forEachIndexed { i, h -> val cell = headerRow.createCell(i); cell.setCellValue(h); cell.cellStyle = headerStyle }
+        
+        // Datos
         products.forEachIndexed { ri, p ->
-            val r = sheet.createRow(ri + 1); val m = if (p.cost > 0) ((p.price - p.cost) / p.cost * 100) else 0.0
-            r.createCell(0).apply { setCellValue(p.id.toDouble()); cellStyle = ds }; r.createCell(1).apply { setCellValue(p.name); cellStyle = ds }; r.createCell(2).apply { setCellValue(p.sku); cellStyle = ds }; r.createCell(3).apply { setCellValue(p.category); cellStyle = ds }
-            r.createCell(4).apply { setCellValue(p.cost); cellStyle = ds }; r.createCell(5).apply { setCellValue(p.price); cellStyle = ds }; r.createCell(6).apply { setCellValue(p.stock.toDouble()); cellStyle = ds }; r.createCell(7).apply { setCellValue(p.minStock.toDouble()); cellStyle = ds }
-            r.createCell(8).apply { setCellValue(p.price - p.cost); cellStyle = ds }; r.createCell(9).apply { setCellValue(m); cellStyle = ds }
+            val row = sheet.createRow(ri + 1)
+            val margin = if (p.cost > 0) ((p.price - p.cost) / p.cost * 100) else 0.0
+            row.createCell(0).apply { setCellValue(p.id.toDouble()); cellStyle = dataStyle }
+            row.createCell(1).apply { setCellValue(p.name); cellStyle = dataStyle }
+            row.createCell(2).apply { setCellValue(p.sku); cellStyle = dataStyle }
+            row.createCell(3).apply { setCellValue(p.category); cellStyle = dataStyle }
+            row.createCell(4).apply { setCellValue(p.cost); cellStyle = dataStyle }
+            row.createCell(5).apply { setCellValue(p.price); cellStyle = dataStyle }
+            row.createCell(6).apply { setCellValue(p.stock.toDouble()); cellStyle = dataStyle }
+            row.createCell(7).apply { setCellValue(p.minStock.toDouble()); cellStyle = dataStyle }
+            row.createCell(8).apply { setCellValue(p.price - p.cost); cellStyle = dataStyle }
+            row.createCell(9).apply { setCellValue(margin); cellStyle = dataStyle }
         }
-        for (i in 0..9) sheet.autoSizeColumn(i); sheet.createFreezePane(0, 1)
-        val os = context.contentResolver.openOutputStream(uri); if (os != null) { wb.write(os); os.flush(); os.close() }; wb.close()
+        
+        // Auto-ajustar columnas
+        for (i in 0..9) sheet.autoSizeColumn(i)
+        sheet.createFreezePane(0, 1)
+        
+        // Guardar - CORREGIDO
+        val outputStream = context.contentResolver.openOutputStream(uri)
+        if (outputStream != null) {
+            wb.write(outputStream)
+            outputStream.flush()
+            outputStream.close()
+        }
+        wb.close()
+        
         withContext(Dispatchers.Main) { Toast.makeText(context, "✅ Exportado: ${products.size} productos", Toast.LENGTH_SHORT).show() }
-    } catch (e: Exception) { e.printStackTrace(); withContext(Dispatchers.Main) { Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show() } }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        withContext(Dispatchers.Main) { Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show() }
+    }
 }
 
 // ========== IMPORTAR EXCEL ==========
 suspend fun importFromExcel(context: android.content.Context, db: AppDatabase, uri: Uri) {
     try {
-        val inp = context.contentResolver.openInputStream(uri) ?: return; val wb = WorkbookFactory.create(inp); val sheet = wb.getSheetAt(0); var imp = 0; var skp = 0
-        for (ri in 1..sheet.lastRowNum) { val row = sheet.getRow(ri) ?: continue; try { val name = row.getCell(1)?.stringCellValue ?: continue; if (name.isBlank()) continue; db.productDao().insert(Product(name = name, sku = row.getCell(2)?.stringCellValue ?: "", category = row.getCell(3)?.stringCellValue ?: "", cost = row.getCell(4)?.numericCellValue ?: 0.0, price = row.getCell(5)?.numericCellValue ?: 0.0, stock = row.getCell(6)?.numericCellValue?.toInt() ?: 0, minStock = row.getCell(7)?.numericCellValue?.toInt() ?: 5)); imp++ } catch (e: Exception) { skp++ } }
-        wb.close(); inp.close()
-        withContext(Dispatchers.Main) { Toast.makeText(context, "✅ $imp importados${if (skp > 0) " ($skp omitidos)" else ""}", Toast.LENGTH_SHORT).show() }
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return
+        val wb = WorkbookFactory.create(inputStream); val sheet = wb.getSheetAt(0)
+        var imported = 0; var skipped = 0
+        for (ri in 1..sheet.lastRowNum) {
+            val row = sheet.getRow(ri) ?: continue
+            try {
+                val name = row.getCell(1)?.stringCellValue ?: continue; if (name.isBlank()) continue
+                db.productDao().insert(Product(name = name, sku = row.getCell(2)?.stringCellValue ?: "", category = row.getCell(3)?.stringCellValue ?: "", cost = row.getCell(4)?.numericCellValue ?: 0.0, price = row.getCell(5)?.numericCellValue ?: 0.0, stock = row.getCell(6)?.numericCellValue?.toInt() ?: 0, minStock = row.getCell(7)?.numericCellValue?.toInt() ?: 5))
+                imported++
+            } catch (e: Exception) { skipped++ }
+        }
+        wb.close(); inputStream.close()
+        withContext(Dispatchers.Main) { Toast.makeText(context, "✅ $imported importados${if (skipped > 0) " ($skipped omitidos)" else ""}", Toast.LENGTH_SHORT).show() }
     } catch (e: Exception) { withContext(Dispatchers.Main) { Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show() } }
 }
