@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.nexus.admin.data.dao.*
 import com.nexus.admin.data.entity.*
 
@@ -46,6 +47,17 @@ abstract class AppDatabase : RoomDatabase() {
                     "nexus_admin_database"
                 )
                 .fallbackToDestructiveMigration()
+                .addCallback(object : RoomDatabase.Callback() {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        super.onCreate(db)
+                        // Base de datos creada correctamente
+                    }
+                    
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        // Base de datos abierta correctamente
+                    }
+                })
                 .build()
                 INSTANCE = instance
                 instance
