@@ -129,7 +129,12 @@ LaunchedEffect(generatedCode) {
                     Text("Código QR de conexión:", fontWeight = FontWeight.Bold)
                     Text("Muestra este QR a tus trabajadores para que escaneen y se conecten como TRABAJADORES", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
-                    Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "QR", modifier = Modifier.size(200.dp).clip(RoundedCornerShape(12.dp)).align(Alignment.CenterHorizontally))
+                    
+if (qrBitmap != null) {
+    Image(bitmap = qrBitmap!!.asImageBitmap(), ...)
+} else {
+    CircularProgressIndicator()
+}
                     Text(generatedCode, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     OutlinedButton(onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
