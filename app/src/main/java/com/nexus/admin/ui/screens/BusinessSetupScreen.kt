@@ -50,17 +50,34 @@ fun BusinessSetupScreen(
     var showJoinDialog by remember { mutableStateOf(false) }
     var showSyncQrDialog by remember { mutableStateOf<Business?>(null) }
 
-    LaunchedEffect(Unit) { db.businessDao().getAllBusinesses().collect { businesses = it } }
+    LaunchedEffect(Unit) {
+        try {
+            db.businessDao().getAllBusinesses().collect { businesses = it }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text("Mis Negocios", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Volver") }
         }
-        Text("Selecciona o crea un negocio", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "Selecciona o crea un negocio",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Spacer(Modifier.height(24.dp))
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Button(onClick = { showCreateDialog = true }, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Filled.AddBusiness, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
@@ -77,29 +94,62 @@ fun BusinessSetupScreen(
         if (businesses.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.Store, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                    Icon(
+                        Icons.Filled.Store, null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                    )
                     Spacer(Modifier.height(16.dp))
                     Text("No hay negocios", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
-            Text("Negocios guardados:", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Negocios guardados:",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
             Spacer(Modifier.height(8.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(businesses) { business ->
-                    Card(modifier = Modifier.fillMaxWidth(), onClick = { onBusinessSelected(business) }) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Surface(modifier = Modifier.size(48.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer) {
-                                Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.Store, null, tint = MaterialTheme.colorScheme.primary) }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onBusinessSelected(business) }
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(48.dp),
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Filled.Store, null, tint = MaterialTheme.colorScheme.primary)
+                                }
                             }
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(business.name, fontWeight = FontWeight.SemiBold)
                                 Text("Dueño: ${business.ownerName}", style = MaterialTheme.typography.bodySmall)
-                                Text("Código: ${business.code}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "Código: ${business.code}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                            IconButton(onClick = { showSyncQrDialog = business }) { Icon(Icons.Filled.QrCode, "QR Sync", tint = MaterialTheme.colorScheme.primary) }
-                            Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            IconButton(onClick = { showSyncQrDialog = business }) {
+                                Icon(
+                                    Icons.Filled.QrCode,
+                                    "QR Sync",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Icon(
+                                Icons.Filled.ChevronRight, null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -114,12 +164,15 @@ fun BusinessSetupScreen(
         val generatedCode = remember { "NEXUS-${UUID.randomUUID().toString().take(8).uppercase()}" }
         var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
         var isGeneratingQr by remember { mutableStateOf(true) }
+        var isSaving by remember { mutableStateOf(false) }
 
         LaunchedEffect(generatedCode) {
             withContext(Dispatchers.IO) {
                 try {
                     qrBitmap = QrCodeGenerator.generateQrCode(generatedCode)
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 isGeneratingQr = false
             }
         }
@@ -129,13 +182,29 @@ fun BusinessSetupScreen(
             title = { Text("Crear Nuevo Negocio") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("Nombre del negocio *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(ownerName, { ownerName = it }, label = { Text("Tu nombre (Administrador) *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        name, { name = it },
+                        label = { Text("Nombre del negocio *") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        ownerName, { ownerName = it },
+                        label = { Text("Tu nombre (Administrador) *") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     HorizontalDivider()
                     Text("Código QR de conexión:", fontWeight = FontWeight.Bold)
-                    Text("Muestra este QR a tus trabajadores", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Muestra este QR a tus trabajadores para que escaneen y se conecten",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Box(modifier = Modifier.size(200.dp).align(Alignment.CenterHorizontally), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier.size(200.dp).align(Alignment.CenterHorizontally),
+                        contentAlignment = Alignment.Center
+                    ) {
                         if (isGeneratingQr) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 CircularProgressIndicator()
@@ -143,34 +212,92 @@ fun BusinessSetupScreen(
                                 Text("Generando QR...", style = MaterialTheme.typography.bodySmall)
                             }
                         } else if (qrBitmap != null) {
-                            Image(bitmap = qrBitmap!!.asImageBitmap(), contentDescription = "QR", modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)))
+                            Image(
+                                bitmap = qrBitmap!!.asImageBitmap(),
+                                contentDescription = "QR",
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
+                            )
                         } else {
                             Text("❌ Error al generar QR", color = MaterialTheme.colorScheme.error)
                         }
                     }
-                    Text(generatedCode, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                    OutlinedButton(onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("Código", generatedCode))
-                        Toast.makeText(context, "✅ Código copiado", Toast.LENGTH_SHORT).show()
-                    }, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        generatedCode,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Código", generatedCode))
+                                Toast.makeText(context, "✅ Código copiado", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "❌ Error al copiar", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(18.dp))
                         Text("Copiar código")
                     }
+                    Text(
+                        "Los trabajadores usarán este QR para conectarse a tu negocio",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    scope.launch {
-                        if (name.isNotBlank() && ownerName.isNotBlank()) {
-                            db.businessDao().insert(Business(name = name, code = generatedCode, ownerName = ownerName))
-                            showCreateDialog = false
-                            Toast.makeText(context, "✅ Negocio creado", Toast.LENGTH_SHORT).show()
+                Button(
+                    onClick = {
+                        if (name.isBlank() || ownerName.isBlank()) {
+                            Toast.makeText(context, "❌ Completa todos los campos", Toast.LENGTH_SHORT).show()
+                            return@Button
                         }
+                        
+                        isSaving = true
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    db.businessDao().insert(
+                                        Business(
+                                            name = name,
+                                            code = generatedCode,
+                                            ownerName = ownerName
+                                        )
+                                    )
+                                }
+                                withContext(Dispatchers.Main) {
+                                    showCreateDialog = false
+                                    Toast.makeText(context, "✅ Negocio creado exitosamente", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            } finally {
+                                isSaving = false
+                            }
+                        }
+                    },
+                    enabled = !isSaving
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    } else {
+                        Text("Crear Negocio")
                     }
-                }) { Text("Crear Negocio") }
+                }
             },
-            dismissButton = { TextButton(onClick = { showCreateDialog = false }) { Text("Cancelar") } }
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
         )
     }
 
@@ -185,7 +312,10 @@ fun BusinessSetupScreen(
 
         if (showScanner) {
             FloatingBarcodeScanner(
-                onBarcodeScanned = { code -> joinCode = code; showScanner = false },
+                onBarcodeScanned = { code ->
+                    joinCode = code
+                    showScanner = false
+                },
                 onDismiss = { showScanner = false }
             )
         } else if (step == 1) {
@@ -195,14 +325,32 @@ fun BusinessSetupScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Pide el código QR al dueño del negocio", style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(joinCode, { joinCode = it.uppercase() }, label = { Text("Código del negocio *") }, singleLine = true, placeholder = { Text("NEXUS-XXXXXXXX") }, modifier = Modifier.fillMaxWidth())
-                        OutlinedButton(onClick = { showScanner = true }, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            joinCode, { joinCode = it.uppercase() },
+                            label = { Text("Código del negocio *") },
+                            singleLine = true,
+                            placeholder = { Text("NEXUS-XXXXXXXX") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedButton(
+                            onClick = { showScanner = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Icon(Icons.Filled.QrCodeScanner, "Escanear QR", modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("Escanear QR")
                         }
-                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                            Text("⚠️ Te unirás como TRABAJADOR. Acceso limitado.", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                            )
+                        ) {
+                            Text(
+                                "⚠️ Te unirás como TRABAJADOR. Solo tendrás acceso a Dashboard, Inventario y Ventas.",
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 },
@@ -210,9 +358,18 @@ fun BusinessSetupScreen(
                     Button(onClick = {
                         scope.launch {
                             if (joinCode.isNotBlank()) {
-                                val business = db.businessDao().getBusinessByCode(joinCode)
-                                if (business != null) step = 2
-                                else Toast.makeText(context, "❌ Código no válido", Toast.LENGTH_SHORT).show()
+                                try {
+                                    val business = withContext(Dispatchers.IO) {
+                                        db.businessDao().getBusinessByCode(joinCode)
+                                    }
+                                    if (business != null) {
+                                        step = 2
+                                    } else {
+                                        Toast.makeText(context, "❌ Código no válido", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                     }) { Text("Continuar") }
@@ -226,28 +383,68 @@ fun BusinessSetupScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Ingresa tu nombre y crea un PIN de 4 dígitos", style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(workerName, { workerName = it }, label = { Text("Tu nombre *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(
+                            workerName, { workerName = it },
+                            label = { Text("Tu nombre *") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         HorizontalDivider()
-                        OutlinedTextField(workerPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) workerPin = it }, label = { Text("PIN (4 dígitos) *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth(), isError = confirmPin.isNotEmpty() && workerPin != confirmPin)
-                        if (confirmPin.isNotEmpty() && workerPin != confirmPin) Text("Los PIN no coinciden", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        OutlinedTextField(
+                            workerPin,
+                            { if (it.length <= 4 && it.all { c -> c.isDigit() }) workerPin = it },
+                            label = { Text("PIN (4 dígitos) *") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            confirmPin,
+                            { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it },
+                            label = { Text("Confirmar PIN *") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            modifier = Modifier.fillMaxWidth(),
+                            isError = confirmPin.isNotEmpty() && workerPin != confirmPin
+                        )
+                        if (confirmPin.isNotEmpty() && workerPin != confirmPin) {
+                            Text(
+                                "Los PIN no coinciden",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 },
                 confirmButton = {
                     Button(onClick = {
                         scope.launch {
                             if (workerName.isNotBlank() && workerPin.length == 4 && workerPin == confirmPin) {
-                                val business = db.businessDao().getBusinessByCode(joinCode)
-                                if (business != null) {
-                                    val existingUser = db.userDao().getUserByPin(workerPin)
-                                    if (existingUser != null) {
-                                        Toast.makeText(context, "❌ Ese PIN ya está en uso", Toast.LENGTH_SHORT).show()
-                                        return@launch
+                                try {
+                                    val business = withContext(Dispatchers.IO) {
+                                        db.businessDao().getBusinessByCode(joinCode)
                                     }
-                                    db.userDao().insert(User(name = workerName, pin = workerPin, role = "worker"))
-                                    onBusinessSelected(business)
-                                    showJoinDialog = false; step = 1
-                                    Toast.makeText(context, "✅ Conectado a: ${business.name}", Toast.LENGTH_SHORT).show()
+                                    if (business != null) {
+                                        val existingUser = withContext(Dispatchers.IO) {
+                                            db.userDao().getUserByPin(workerPin)
+                                        }
+                                        if (existingUser != null) {
+                                            Toast.makeText(context, "❌ Ese PIN ya está en uso", Toast.LENGTH_SHORT).show()
+                                            return@launch
+                                        }
+                                        withContext(Dispatchers.IO) {
+                                            db.userDao().insert(User(name = workerName, pin = workerPin, role = "worker"))
+                                        }
+                                        onBusinessSelected(business)
+                                        showJoinDialog = false
+                                        step = 1
+                                        Toast.makeText(context, "✅ Conectado a: ${business.name}", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -272,7 +469,9 @@ fun BusinessSetupScreen(
                     if (syncData.isNotEmpty()) {
                         qrBitmapSync = QrCodeGenerator.generateQrCode(syncData, 512)
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 isGeneratingSyncQr = false
             }
         }
@@ -282,12 +481,20 @@ fun BusinessSetupScreen(
             title = { Text("QR de Sincronización") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Muestra este QR al otro dispositivo", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                    Text(
+                        "Muestra este QR al otro dispositivo",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
+                    )
                     Spacer(Modifier.height(16.dp))
                     if (isGeneratingSyncQr) {
                         CircularProgressIndicator()
                     } else if (qrBitmapSync != null) {
-                        Image(bitmap = qrBitmapSync!!.asImageBitmap(), contentDescription = "QR Sync", modifier = Modifier.size(280.dp).clip(RoundedCornerShape(12.dp)))
+                        Image(
+                            bitmap = qrBitmapSync!!.asImageBitmap(),
+                            contentDescription = "QR Sync",
+                            modifier = Modifier.size(280.dp).clip(RoundedCornerShape(12.dp))
+                        )
                     } else {
                         Text("❌ Sin datos para sincronizar", color = MaterialTheme.colorScheme.error)
                     }
