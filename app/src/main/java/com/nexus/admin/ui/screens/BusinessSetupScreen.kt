@@ -110,7 +110,13 @@ fun BusinessSetupScreen(
         var name by remember { mutableStateOf("") }
         var ownerName by remember { mutableStateOf("") }
         val generatedCode = remember { "NEXUS-${UUID.randomUUID().toString().take(8).uppercase()}" }
-        val qrBitmap = remember { QrCodeGenerator.generateQrCode(generatedCode) }
+        var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+LaunchedEffect(generatedCode) {
+    withContext(Dispatchers.IO) {
+        qrBitmap = QrCodeGenerator.generateQrCode(generatedCode)
+    }
+}
 
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
