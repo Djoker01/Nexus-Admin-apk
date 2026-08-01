@@ -21,15 +21,28 @@ class OfflineSyncManager(
 ) {
     private val gson = GsonBuilder().create()
 
+    /**
+     * EXPORTAR: Generar string comprimido con ventas, caja, stock y cuentas por cobrar
+     */
     suspend fun exportSalesToQr(workerName: String, businessCode: String): String = withContext(Dispatchers.IO) {
         try {
             val todayStart = Utils.getTodayStart()
             val todayEnd = Utils.getTodayEnd()
+            
+            // Ventas del día
             val todaySales = db.saleDao().getAllSales().first()
                 .filter { it.date in todayStart..todayEnd && !it.isReturned }
+            
+            // Movimientos de caja del día
             val todayCash = db.cashMovementDao().getAllMovements().first()
                 .filter { it.date in todayStart..todayEnd }
+            
+            // Stock actual
             val products = db.productDao().getAllProducts().first()
+            
+            // Cuentas por cobrar activas (pendientes y parciales)
+            val activeReceivables = db.receivableDao().getAllReceivables().first()
+                .filter { it.status != "paid" }
 
             val syncPackage = SyncPackage(
                 businessCode = businessCode,
@@ -44,31 +57,64 @@ class OfflineSyncManager(
                         date = sale.date,
                         products = sale.products.joinToString(";") { sp ->
                             "${sp.name},${sp.quantity},${sp.price},${sp.cost}"
-                        }
+                        },
+                        isReceivable = sale.isReceivable
                     )
                 },
                 cashMovements = todayCash.map { m ->
-                    SyncCashMovementQr(m.type, m.amount, m.description, m.date)
+                    SyncCashMovementQr(
+                        type = m.type,
+                        amount = m.amount,
+                        description = m.description,
+                        date = m.date
+                    )
                 },
                 products = products.map { p ->
-                    SyncProductQr(p.name, p.sku, p.price, p.cost, p.stock, p.minStock)
+                    SyncProductQr(
+                        name = p.name,
+                        sku = p.sku,
+                        price = p.price,
+                        cost = p.cost,
+                        stock = p.stock,
+                        minStock = p.minStock
+                    )
+                },
+                receivables = activeReceivables.map { r ->
+                    SyncReceivableQr(
+                        clientName = r.clientName,
+                        concept = r.concept,
+                        totalAmount = r.totalAmount,
+                        balance = r.balance,
+                        status = r.status,
+                        date = r.date
+                    )
                 }
             )
 
             val json = gson.toJson(syncPackage)
             val compressed = compress(json)
+            
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, "✅ ${todaySales.size} ventas exportadas", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    "✅ ${todaySales.size} ventas, ${activeReceivables.size} ctas por cobrar exportadas",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
+            
             compressed
         } catch (e: Exception) {
+            e.printStackTrace()
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "❌ Error al exportar: ${e.message}", Toast.LENGTH_LONG).show()
             }
             ""
         }
     }
 
+    /**
+     * IMPORTAR: Recibir string comprimido y actualizar BD local
+     */
     suspend fun importSalesFromQr(compressedData: String): ImportResult = withContext(Dispatchers.IO) {
         try {
             val json = decompress(compressedData)
@@ -77,46 +123,134 @@ class OfflineSyncManager(
             var importedSales = 0
             var importedCash = 0
             var updatedProducts = 0
+            var importedReceivables = 0
 
+            // 1. Importar ventas
             syncPackage.sales.forEach { s ->
                 val saleProducts = s.products.split(";").mapNotNull { sp ->
                     val parts = sp.split(",")
                     if (parts.size >= 4) {
-                        SaleProduct(0, parts[0], parts[1].toIntOrNull() ?: 1, parts[2].toDoubleOrNull() ?: 0.0, parts[3].toDoubleOrNull() ?: 0.0)
+                        SaleProduct(
+                            productId = 0,
+                            name = parts[0],
+                            quantity = parts[1].toIntOrNull() ?: 1,
+                            price = parts[2].toDoubleOrNull() ?: 0.0,
+                            cost = parts[3].toDoubleOrNull() ?: 0.0
+                        )
                     } else null
                 }
                 if (saleProducts.isNotEmpty()) {
-                    db.saleDao().insert(Sale(client = s.client, products = saleProducts, total = s.total, cost = s.cost, paymentMethod = s.paymentMethod, date = s.date))
-                    importedSales++
+                    // Verificar si ya existe esta venta (evitar duplicados)
+                    val existingSales = db.saleDao().getAllSales().first()
+                    val isDuplicate = existingSales.any { existing ->
+                        existing.client == s.client &&
+                        existing.total == s.total &&
+                        existing.date == s.date
+                    }
+                    
+                    if (!isDuplicate) {
+                        db.saleDao().insert(
+                            Sale(
+                                client = s.client,
+                                products = saleProducts,
+                                total = s.total,
+                                cost = s.cost,
+                                paymentMethod = s.paymentMethod,
+                                date = s.date,
+                                isReceivable = s.isReceivable
+                            )
+                        )
+                        importedSales++
+                    }
                 }
             }
 
+            // 2. Importar movimientos de caja
             syncPackage.cashMovements.forEach { m ->
-                db.cashMovementDao().insert(CashMovement(type = m.type, amount = m.amount, description = "${m.description} (${syncPackage.workerName})", date = m.date))
-                importedCash++
+                val existingCash = db.cashMovementDao().getAllMovements().first()
+                val isDuplicate = existingCash.any { existing ->
+                    existing.amount == m.amount &&
+                    existing.description == m.description &&
+                    existing.date == m.date
+                }
+                
+                if (!isDuplicate) {
+                    db.cashMovementDao().insert(
+                        CashMovement(
+                            type = m.type,
+                            amount = m.amount,
+                            description = "${m.description} (Sync: ${syncPackage.workerName})",
+                            date = m.date
+                        )
+                    )
+                    importedCash++
+                }
             }
 
+            // 3. Actualizar stock (solo si el stock remoto es menor = más reciente)
             syncPackage.products.forEach { p ->
-                val existing = db.productDao().getAllProducts().first().find { it.sku == p.sku }
+                val existing = db.productDao().getAllProducts().first()
+                    .find { it.sku == p.sku }
                 if (existing != null && p.stock < existing.stock) {
                     db.productDao().update(existing.copy(stock = p.stock))
                     updatedProducts++
                 }
             }
 
-            val result = ImportResult(true, importedSales, importedCash, updatedProducts, syncPackage.workerName)
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "✅ ${result.salesImported} ventas de ${result.workerName}", Toast.LENGTH_SHORT).show()
+            // 4. Importar cuentas por cobrar (NUEVO)
+            syncPackage.receivables.forEach { r ->
+                val existingReceivables = db.receivableDao().getAllReceivables().first()
+                val isDuplicate = existingReceivables.any { existing ->
+                    existing.clientName == r.clientName &&
+                    existing.concept == r.concept &&
+                    existing.totalAmount == r.totalAmount
+                }
+                
+                if (!isDuplicate) {
+                    db.receivableDao().insert(
+                        Receivable(
+                            clientName = r.clientName,
+                            concept = r.concept,
+                            totalAmount = r.totalAmount,
+                            balance = r.balance,
+                            status = r.status,
+                            date = r.date
+                        )
+                    )
+                    importedReceivables++
+                }
             }
+
+            val result = ImportResult(
+                success = true,
+                salesImported = importedSales,
+                cashImported = importedCash,
+                productsUpdated = updatedProducts,
+                receivablesImported = importedReceivables,
+                workerName = syncPackage.workerName
+            )
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    context,
+                    "✅ ${result.salesImported} ventas, ${result.receivablesImported} ctas por cobrar de ${result.workerName}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
             result
         } catch (e: Exception) {
+            e.printStackTrace()
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "❌ Error al importar: ${e.message}", Toast.LENGTH_LONG).show()
             }
-            ImportResult()
+            ImportResult(success = false)
         }
     }
 
+    /**
+     * Comprimir string para que quepa en QR
+     */
     private fun compress(data: String): String {
         val deflater = Deflater(Deflater.BEST_COMPRESSION)
         deflater.setInput(data.toByteArray(Charsets.UTF_8))
@@ -130,6 +264,9 @@ class OfflineSyncManager(
         return Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
     }
 
+    /**
+     * Descomprimir string desde QR
+     */
     private fun decompress(data: String): String {
         val inflater = Inflater()
         inflater.setInput(Base64.decode(data, Base64.NO_WRAP))
