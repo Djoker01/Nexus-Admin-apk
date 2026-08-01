@@ -31,7 +31,9 @@ import com.nexus.admin.data.entity.User
 import com.nexus.admin.data.sync.OfflineSyncManager
 import com.nexus.admin.ui.components.FloatingBarcodeScanner
 import com.nexus.admin.utils.QrCodeGenerator
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -111,12 +113,16 @@ fun BusinessSetupScreen(
         var ownerName by remember { mutableStateOf("") }
         val generatedCode = remember { "NEXUS-${UUID.randomUUID().toString().take(8).uppercase()}" }
         var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+        var isGeneratingQr by remember { mutableStateOf(true) }
 
-LaunchedEffect(generatedCode) {
-    withContext(Dispatchers.IO) {
-        qrBitmap = QrCodeGenerator.generateQrCode(generatedCode)
-    }
-}
+        LaunchedEffect(generatedCode) {
+            withContext(Dispatchers.IO) {
+                try {
+                    qrBitmap = QrCodeGenerator.generateQrCode(generatedCode)
+                } catch (_: Exception) {}
+                isGeneratingQr = false
+            }
+        }
 
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
@@ -127,14 +133,21 @@ LaunchedEffect(generatedCode) {
                     OutlinedTextField(ownerName, { ownerName = it }, label = { Text("Tu nombre (Administrador) *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     HorizontalDivider()
                     Text("Código QR de conexión:", fontWeight = FontWeight.Bold)
-                    Text("Muestra este QR a tus trabajadores para que escaneen y se conecten como TRABAJADORES", style = MaterialTheme.typography.bodySmall)
+                    Text("Muestra este QR a tus trabajadores", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
-                    
-if (qrBitmap != null) {
-    Image(bitmap = qrBitmap!!.asImageBitmap(), ...)
-} else {
-    CircularProgressIndicator()
-}
+                    Box(modifier = Modifier.size(200.dp).align(Alignment.CenterHorizontally), contentAlignment = Alignment.Center) {
+                        if (isGeneratingQr) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator()
+                                Spacer(Modifier.height(8.dp))
+                                Text("Generando QR...", style = MaterialTheme.typography.bodySmall)
+                            }
+                        } else if (qrBitmap != null) {
+                            Image(bitmap = qrBitmap!!.asImageBitmap(), contentDescription = "QR", modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)))
+                        } else {
+                            Text("❌ Error al generar QR", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                     Text(generatedCode, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     OutlinedButton(onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -144,7 +157,6 @@ if (qrBitmap != null) {
                         Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(18.dp))
                         Text("Copiar código")
                     }
-                    Text("Los trabajadores usarán este QR para conectarse a tu negocio", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = {
@@ -153,7 +165,7 @@ if (qrBitmap != null) {
                         if (name.isNotBlank() && ownerName.isNotBlank()) {
                             db.businessDao().insert(Business(name = name, code = generatedCode, ownerName = ownerName))
                             showCreateDialog = false
-                            Toast.makeText(context, "✅ Negocio creado. Eres el Administrador", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "✅ Negocio creado", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }) { Text("Crear Negocio") }
@@ -162,7 +174,7 @@ if (qrBitmap != null) {
         )
     }
 
-    // ========== DIÁLOGO: UNIRSE COMO TRABAJADOR (CON PIN PERSONALIZADO) ==========
+    // ========== DIÁLOGO: UNIRSE COMO TRABAJADOR ==========
     if (showJoinDialog) {
         var joinCode by remember { mutableStateOf("") }
         var workerName by remember { mutableStateOf("") }
@@ -177,7 +189,6 @@ if (qrBitmap != null) {
                 onDismiss = { showScanner = false }
             )
         } else if (step == 1) {
-            // Paso 1: Ingresar código del negocio
             AlertDialog(
                 onDismissRequest = { showJoinDialog = false },
                 title = { Text("Unirse como Trabajador") },
@@ -185,15 +196,13 @@ if (qrBitmap != null) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Pide el código QR al dueño del negocio", style = MaterialTheme.typography.bodySmall)
                         OutlinedTextField(joinCode, { joinCode = it.uppercase() }, label = { Text("Código del negocio *") }, singleLine = true, placeholder = { Text("NEXUS-XXXXXXXX") }, modifier = Modifier.fillMaxWidth())
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(onClick = { showScanner = true }, modifier = Modifier.weight(1f)) {
-                                Icon(Icons.Filled.QrCodeScanner, "Escanear QR", modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Escanear QR")
-                            }
+                        OutlinedButton(onClick = { showScanner = true }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Filled.QrCodeScanner, "Escanear QR", modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Escanear QR")
                         }
                         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                            Text("⚠️ Te unirás como TRABAJADOR. Solo tendrás acceso a Dashboard, Inventario y Ventas.", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                            Text("⚠️ Te unirás como TRABAJADOR. Acceso limitado.", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 },
@@ -211,22 +220,17 @@ if (qrBitmap != null) {
                 dismissButton = { TextButton(onClick = { showJoinDialog = false }) { Text("Cancelar") } }
             )
         } else {
-            // Paso 2: Ingresar nombre y crear PIN
             AlertDialog(
                 onDismissRequest = { showJoinDialog = false; step = 1 },
-                title = { Text("Crear tu cuenta de Trabajador") },
+                title = { Text("Crear tu cuenta") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Establece tu nombre y crea un PIN de 4 dígitos para acceder", style = MaterialTheme.typography.bodySmall)
+                        Text("Ingresa tu nombre y crea un PIN de 4 dígitos", style = MaterialTheme.typography.bodySmall)
                         OutlinedTextField(workerName, { workerName = it }, label = { Text("Tu nombre *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         HorizontalDivider()
-                        Text("Crea tu PIN de acceso:", fontWeight = FontWeight.SemiBold)
                         OutlinedTextField(workerPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) workerPin = it }, label = { Text("PIN (4 dígitos) *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth(), isError = confirmPin.isNotEmpty() && workerPin != confirmPin)
                         if (confirmPin.isNotEmpty() && workerPin != confirmPin) Text("Los PIN no coinciden", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                            Text("🔐 Recuerda tu PIN. Lo necesitarás para acceder a la aplicación.", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
-                        }
                     }
                 },
                 confirmButton = {
@@ -237,7 +241,7 @@ if (qrBitmap != null) {
                                 if (business != null) {
                                     val existingUser = db.userDao().getUserByPin(workerPin)
                                     if (existingUser != null) {
-                                        Toast.makeText(context, "❌ Ese PIN ya está en uso. Elige otro.", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "❌ Ese PIN ya está en uso", Toast.LENGTH_SHORT).show()
                                         return@launch
                                     }
                                     db.userDao().insert(User(name = workerName, pin = workerPin, role = "worker"))
@@ -245,8 +249,6 @@ if (qrBitmap != null) {
                                     showJoinDialog = false; step = 1
                                     Toast.makeText(context, "✅ Conectado a: ${business.name}", Toast.LENGTH_SHORT).show()
                                 }
-                            } else {
-                                Toast.makeText(context, "❌ Completa todos los campos correctamente", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }) { Text("Crear Cuenta") }
@@ -260,11 +262,19 @@ if (qrBitmap != null) {
     showSyncQrDialog?.let { business ->
         var syncData by remember { mutableStateOf("") }
         var qrBitmapSync by remember { mutableStateOf<Bitmap?>(null) }
+        var isGeneratingSyncQr by remember { mutableStateOf(true) }
         val syncManager = remember { OfflineSyncManager(context, db) }
 
         LaunchedEffect(business) {
-            syncData = syncManager.exportSalesToQr("Admin", business.code)
-            if (syncData.isNotEmpty()) qrBitmapSync = QrCodeGenerator.generateQrCode(syncData, 512)
+            withContext(Dispatchers.IO) {
+                try {
+                    syncData = syncManager.exportSalesToQr("Admin", business.code)
+                    if (syncData.isNotEmpty()) {
+                        qrBitmapSync = QrCodeGenerator.generateQrCode(syncData, 512)
+                    }
+                } catch (_: Exception) {}
+                isGeneratingSyncQr = false
+            }
         }
 
         AlertDialog(
@@ -274,8 +284,13 @@ if (qrBitmap != null) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Muestra este QR al otro dispositivo", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(16.dp))
-                    if (qrBitmapSync != null) Image(bitmap = qrBitmapSync!!.asImageBitmap(), contentDescription = "QR Sync", modifier = Modifier.size(280.dp).clip(RoundedCornerShape(12.dp)))
-                    else CircularProgressIndicator()
+                    if (isGeneratingSyncQr) {
+                        CircularProgressIndicator()
+                    } else if (qrBitmapSync != null) {
+                        Image(bitmap = qrBitmapSync!!.asImageBitmap(), contentDescription = "QR Sync", modifier = Modifier.size(280.dp).clip(RoundedCornerShape(12.dp)))
+                    } else {
+                        Text("❌ Sin datos para sincronizar", color = MaterialTheme.colorScheme.error)
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = { showSyncQrDialog = null }) { Text("Cerrar") } }
