@@ -1,7 +1,6 @@
 package com.nexus.admin.data
 
 import android.content.Context
-import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -40,36 +39,20 @@ abstract class AppDatabase : RoomDatabase() {
         private var INSTANCE: AppDatabase? = null
 
         fun getDatabase(context: Context): AppDatabase {
-            if (INSTANCE != null) return INSTANCE!!
-            
-            return synchronized(this) {
+            return INSTANCE ?: synchronized(this) {
                 if (INSTANCE != null) return INSTANCE!!
                 
-                try {
-                    val instance = Room.databaseBuilder(
-                        context.applicationContext,
-                        AppDatabase::class.java,
-                        "nexus_admin_database"
-                    )
-                    .fallbackToDestructiveMigration()
-                    .build()
-                    INSTANCE = instance
-                    Log.d("NexusAdmin", "Base de datos creada exitosamente")
-                    instance
-                } catch (e: Exception) {
-                    Log.e("NexusAdmin", "Error creando BD: ${e.message}", e)
-                    // Si falla, intentar con destructive migration
-                    context.applicationContext.deleteDatabase("nexus_admin_database")
-                    val instance = Room.databaseBuilder(
-                        context.applicationContext,
-                        AppDatabase::class.java,
-                        "nexus_admin_database"
-                    )
-                    .fallbackToDestructiveMigration()
-                    .build()
-                    INSTANCE = instance
-                    instance
-                }
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "nexus_admin_database"
+                )
+                .fallbackToDestructiveMigration()
+                .allowMainThreadQueries() // PERMITIR consultas en hilo principal
+                .build()
+                
+                INSTANCE = instance
+                instance
             }
         }
     }
