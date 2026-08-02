@@ -34,6 +34,7 @@ import com.nexus.admin.ui.components.FloatingBarcodeScanner
 import com.nexus.admin.utils.QrCodeGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
@@ -51,29 +52,50 @@ fun BusinessSetupScreen(
     var showJoinDialog by remember { mutableStateOf(false) }
     var showSyncQrDialog by remember { mutableStateOf<Business?>(null) }
 
+    // Cargar negocios guardados
     LaunchedEffect(Unit) {
         try {
             db.businessDao().getAllBusinesses().collect { businesses = it }
         } catch (e: Exception) {
-            Log.e("BusinessSetup", "Error loading businesses: ${e.message}", e)
+            Log.e("BusinessSetup", "Error: ${e.message}", e)
         }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text("Mis Negocios", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Volver") }
         }
         Text("Selecciona o crea un negocio", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { showCreateDialog = true }, modifier = Modifier.weight(1f)) {
+        // BOTONES PRINCIPALES
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = { 
+                    Log.d("BusinessSetup", "Botón Crear Negocio presionado")
+                    showCreateDialog = true 
+                },
+                modifier = Modifier.weight(1f)
+            ) {
                 Icon(Icons.Filled.AddBusiness, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Crear Negocio")
             }
-            OutlinedButton(onClick = { showJoinDialog = true }, modifier = Modifier.weight(1f)) {
+            OutlinedButton(
+                onClick = { 
+                    Log.d("BusinessSetup", "Botón Unirse presionado")
+                    showJoinDialog = true 
+                },
+                modifier = Modifier.weight(1f)
+            ) {
                 Icon(Icons.Filled.PersonAdd, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Unirse como Trabajador")
@@ -81,6 +103,7 @@ fun BusinessSetupScreen(
         }
         Spacer(Modifier.height(24.dp))
 
+        // Lista de negocios
         if (businesses.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -94,7 +117,10 @@ fun BusinessSetupScreen(
             Spacer(Modifier.height(8.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(businesses) { business ->
-                    Card(modifier = Modifier.fillMaxWidth(), onClick = { onBusinessSelected(business) }) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onBusinessSelected(business) }
+                    ) {
                         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Surface(modifier = Modifier.size(48.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer) {
                                 Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.Store, null, tint = MaterialTheme.colorScheme.primary) }
@@ -114,130 +140,92 @@ fun BusinessSetupScreen(
         }
     }
 
-// ========== DIÁLOGO: CREAR NEGOCIO (ADMIN) ==========
-if (showCreateDialog) {
-    var name by remember { mutableStateOf("") }
-    var ownerName by remember { mutableStateOf("") }
-    val generatedCode = remember { "NEXUS-${UUID.randomUUID().toString().take(8).uppercase()}" }
-    var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var isGeneratingQr by remember { mutableStateOf(true) }
-    var isSaving by remember { mutableStateOf(false) }
+    // ========== DIÁLOGO: CREAR NEGOCIO ==========
+    if (showCreateDialog) {
+        var name by remember { mutableStateOf("") }
+        var ownerName by remember { mutableStateOf("") }
+        val generatedCode = remember { "NEXUS-${UUID.randomUUID().toString().take(8).uppercase()}" }
+        var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+        var isGeneratingQr by remember { mutableStateOf(true) }
 
-    LaunchedEffect(generatedCode) {
-        withContext(Dispatchers.IO) {
-            try {
-                qrBitmap = QrCodeGenerator.generateQrCode(generatedCode)
-            } catch (e: Exception) {
-                Log.e("BusinessSetup", "Error QR: ${e.message}", e)
+        // Generar QR
+        LaunchedEffect(generatedCode) {
+            withContext(Dispatchers.IO) {
+                try {
+                    qrBitmap = QrCodeGenerator.generateQrCode(generatedCode)
+                } catch (e: Exception) {
+                    Log.e("BusinessSetup", "Error QR: ${e.message}", e)
+                }
+                isGeneratingQr = false
             }
-            isGeneratingQr = false
         }
-    }
 
-    AlertDialog(
-        onDismissRequest = { if (!isSaving) showCreateDialog = false },
-        title = { Text("Crear Nuevo Negocio") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    name, { name = it },
-                    label = { Text("Nombre del negocio *") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSaving
-                )
-                OutlinedTextField(
-                    ownerName, { ownerName = it },
-                    label = { Text("Tu nombre (Administrador) *") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSaving
-                )
-                HorizontalDivider()
-                Text("Código QR de conexión:", fontWeight = FontWeight.Bold)
-                Text("Muestra este QR a tus trabajadores", style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(8.dp))
-                
-                Box(
-                    modifier = Modifier.size(200.dp).align(Alignment.CenterHorizontally),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isGeneratingQr) {
-                        CircularProgressIndicator()
-                    } else if (qrBitmap != null) {
-                        Image(
-                            bitmap = qrBitmap!!.asImageBitmap(),
-                            contentDescription = "QR",
-                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
-                        )
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("Crear Nuevo Negocio") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        name, { name = it },
+                        label = { Text("Nombre del negocio *") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        ownerName, { ownerName = it },
+                        label = { Text("Tu nombre (Administrador) *") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    HorizontalDivider()
+                    Text("Código QR de conexión:", fontWeight = FontWeight.Bold)
+                    Text("Muestra este QR a tus trabajadores", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    
+                    Box(modifier = Modifier.size(200.dp).align(Alignment.CenterHorizontally), contentAlignment = Alignment.Center) {
+                        if (isGeneratingQr) CircularProgressIndicator()
+                        else if (qrBitmap != null) Image(bitmap = qrBitmap!!.asImageBitmap(), contentDescription = "QR", modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)))
+                    }
+                    
+                    Text(generatedCode, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    
+                    OutlinedButton(onClick = {
+                        try {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Código", generatedCode))
+                            Toast.makeText(context, "✅ Código copiado", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error al copiar", Toast.LENGTH_SHORT).show()
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(18.dp))
+                        Text("Copiar código")
                     }
                 }
-                
-                Text(
-                    generatedCode,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
+            },
+            confirmButton = {
+                Button(onClick = {
                     if (name.isBlank() || ownerName.isBlank()) {
                         Toast.makeText(context, "❌ Completa todos los campos", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    if (isSaving) return@Button
-                    
-                    isSaving = true
-                    scope.launch {
-                        try {
-                            withContext(Dispatchers.IO) {
-                                db.businessDao().insert(
-                                    Business(
-                                        name = name,
-                                        code = generatedCode,
-                                        ownerName = ownerName
-                                    )
-                                )
-                            }
-                            withContext(Dispatchers.Main) {
-                                showCreateDialog = false
-                                Toast.makeText(context, "✅ Negocio creado exitosamente", Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (e: Exception) {
-                            Log.e("BusinessSetup", "Error: ${e.message}", e)
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
-                            }
-                            isSaving = false
+                    try {
+                        runBlocking {
+                            db.businessDao().insert(Business(name = name, code = generatedCode, ownerName = ownerName))
                         }
+                        showCreateDialog = false
+                        Toast.makeText(context, "✅ Negocio creado exitosamente", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Log.e("BusinessSetup", "Error insert: ${e.message}", e)
+                        Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
                     }
-                },
-                enabled = !isSaving && name.isNotBlank() && ownerName.isNotBlank()
-            ) {
-                if (isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
+                }) {
                     Text("Crear Negocio")
                 }
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = { if (!isSaving) showCreateDialog = false },
-                enabled = !isSaving
-            ) {
-                Text("Cancelar")
-            }
-        }
-    )
-}
+            },
+            dismissButton = { TextButton(onClick = { showCreateDialog = false }) { Text("Cancelar") } }
+        )
+    }
 
     // ========== DIÁLOGO: UNIRSE COMO TRABAJADOR ==========
     if (showJoinDialog) {
@@ -259,29 +247,23 @@ if (showCreateDialog) {
                 title = { Text("Unirse como Trabajador") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Pide el código QR al dueño del negocio", style = MaterialTheme.typography.bodySmall)
+                        Text("Pide el código QR al dueño del negocio")
                         OutlinedTextField(joinCode, { joinCode = it.uppercase() }, label = { Text("Código del negocio *") }, singleLine = true, placeholder = { Text("NEXUS-XXXXXXXX") }, modifier = Modifier.fillMaxWidth())
                         OutlinedButton(onClick = { showScanner = true }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Filled.QrCodeScanner, "Escanear QR", modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Filled.QrCodeScanner, "Escanear", modifier = Modifier.size(20.dp))
                             Text("Escanear QR")
-                        }
-                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                            Text("⚠️ Te unirás como TRABAJADOR. Acceso limitado.", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 },
                 confirmButton = {
                     Button(onClick = {
-                        scope.launch {
-                            if (joinCode.isBlank()) return@launch
-                            try {
-                                val business = withContext(Dispatchers.IO) { db.businessDao().getBusinessByCode(joinCode) }
-                                if (business != null) step = 2
-                                else Toast.makeText(context, "❌ Código no válido", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
+                        if (joinCode.isBlank()) return@Button
+                        try {
+                            val business = runBlocking { db.businessDao().getBusinessByCode(joinCode) }
+                            if (business != null) step = 2
+                            else Toast.makeText(context, "❌ Código no válido", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }) { Text("Continuar") }
                 },
@@ -293,35 +275,24 @@ if (showCreateDialog) {
                 title = { Text("Crear tu cuenta") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Ingresa tu nombre y crea un PIN de 4 dígitos", style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(workerName, { workerName = it }, label = { Text("Tu nombre *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        HorizontalDivider()
-                        OutlinedTextField(workerPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) workerPin = it }, label = { Text("PIN (4 dígitos) *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth())
-                        if (confirmPin.isNotEmpty() && workerPin != confirmPin) Text("Los PIN no coinciden", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        OutlinedTextField(workerName, { workerName = it }, label = { Text("Tu nombre *") }, singleLine = true)
+                        OutlinedTextField(workerPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) workerPin = it }, label = { Text("PIN (4 dígitos) *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+                        OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
                     }
                 },
                 confirmButton = {
                     Button(onClick = {
-                        scope.launch {
-                            if (workerName.isBlank() || workerPin.length != 4 || workerPin != confirmPin) return@launch
-                            try {
-                                val business = withContext(Dispatchers.IO) { db.businessDao().getBusinessByCode(joinCode) }
-                                if (business != null) {
-                                    val existingUser = withContext(Dispatchers.IO) { db.userDao().getUserByPin(workerPin) }
-                                    if (existingUser != null) {
-                                        Toast.makeText(context, "❌ Ese PIN ya está en uso", Toast.LENGTH_SHORT).show()
-                                        return@launch
-                                    }
-                                    withContext(Dispatchers.IO) { db.userDao().insert(User(name = workerName, pin = workerPin, role = "worker")) }
-                                    onBusinessSelected(business)
-                                    showJoinDialog = false; step = 1
-                                    Toast.makeText(context, "✅ Conectado a: ${business.name}", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                Log.e("BusinessSetup", "Error joining: ${e.message}", e)
-                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                        if (workerName.isBlank() || workerPin.length != 4 || workerPin != confirmPin) return@Button
+                        try {
+                            val business = runBlocking { db.businessDao().getBusinessByCode(joinCode) }
+                            if (business != null) {
+                                runBlocking { db.userDao().insert(User(name = workerName, pin = workerPin, role = "worker")) }
+                                onBusinessSelected(business)
+                                showJoinDialog = false; step = 1
+                                Toast.makeText(context, "✅ Conectado a: ${business.name}", Toast.LENGTH_SHORT).show()
                             }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }) { Text("Crear Cuenta") }
                 },
@@ -332,23 +303,20 @@ if (showCreateDialog) {
 
     // ========== DIÁLOGO: QR DE SINCRONIZACIÓN ==========
     showSyncQrDialog?.let { business ->
-        var syncData by remember { mutableStateOf("") }
         var qrBitmapSync by remember { mutableStateOf<Bitmap?>(null) }
         var isGeneratingSyncQr by remember { mutableStateOf(true) }
-        val syncManager = remember { OfflineSyncManager(context, db) }
 
         LaunchedEffect(business) {
-            try {
-                withContext(Dispatchers.IO) {
-                    syncData = syncManager.exportSalesToQr("Admin", business.code)
-                    if (syncData.isNotEmpty()) {
-                        qrBitmapSync = QrCodeGenerator.generateQrCode(syncData, 512)
-                    }
+            withContext(Dispatchers.IO) {
+                try {
+                    val syncManager = OfflineSyncManager(context, db)
+                    val data = syncManager.exportSalesToQr("Admin", business.code)
+                    if (data.isNotEmpty()) qrBitmapSync = QrCodeGenerator.generateQrCode(data, 512)
+                } catch (e: Exception) {
+                    Log.e("BusinessSetup", "Error sync: ${e.message}", e)
                 }
-            } catch (e: Exception) {
-                Log.e("BusinessSetup", "Error generating sync QR: ${e.message}", e)
+                isGeneratingSyncQr = false
             }
-            isGeneratingSyncQr = false
         }
 
         AlertDialog(
@@ -356,11 +324,9 @@ if (showCreateDialog) {
             title = { Text("QR de Sincronización") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Muestra este QR al otro dispositivo", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(16.dp))
                     if (isGeneratingSyncQr) CircularProgressIndicator()
                     else if (qrBitmapSync != null) Image(bitmap = qrBitmapSync!!.asImageBitmap(), contentDescription = "QR Sync", modifier = Modifier.size(280.dp).clip(RoundedCornerShape(12.dp)))
-                    else Text("❌ Sin datos", color = MaterialTheme.colorScheme.error)
+                    else Text("Sin datos")
                 }
             },
             confirmButton = { TextButton(onClick = { showSyncQrDialog = null }) { Text("Cerrar") } }
