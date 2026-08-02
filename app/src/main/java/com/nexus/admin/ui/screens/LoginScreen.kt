@@ -34,25 +34,19 @@ fun LoginScreen(
     var showChangePin by remember { mutableStateOf(false) }
     var showCreateAdminDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
-    var attempts by remember { mutableIntStateOf(0) }
 
-    // Verificar si es primera instalación
+    // Verificar si hay admin - con manejo de errores
     LaunchedEffect(Unit) {
         try {
-            withContext(Dispatchers.IO) {
-                val admin = db.userDao().getAdmin()
-                if (admin == null) {
-                    withContext(Dispatchers.Main) {
-                        showCreateAdminDialog = true
-                    }
-                }
+            val admin = withContext(Dispatchers.IO) {
+                db.userDao().getAdmin()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            // Si falla la verificación, mostrar diálogo de creación igualmente
-            withContext(Dispatchers.Main) {
+            if (admin == null) {
                 showCreateAdminDialog = true
             }
+        } catch (e: Exception) {
+            // Si falla, asumimos que no hay admin
+            showCreateAdminDialog = true
         }
     }
 
@@ -65,17 +59,11 @@ fun LoginScreen(
         Spacer(Modifier.height(16.dp))
         Text("Nexus Admin", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text("Ingrese su PIN para acceder", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
-
         Spacer(Modifier.height(32.dp))
 
         OutlinedTextField(
             value = pin,
-            onValueChange = { 
-                if (it.length <= 4 && it.all { c -> c.isDigit() }) {
-                    pin = it
-                    errorMessage = ""
-                }
-            },
+            onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) { pin = it; errorMessage = "" } },
             label = { Text("PIN de acceso") },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -86,12 +74,7 @@ fun LoginScreen(
         )
 
         if (errorMessage.isNotEmpty()) {
-            Text(
-                errorMessage,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
 
         Spacer(Modifier.height(24.dp))
@@ -99,163 +82,79 @@ fun LoginScreen(
         Button(
             onClick = {
                 if (pin.length != 4) return@Button
-                
                 scope.launch {
                     isLoading = true
                     errorMessage = ""
-                    
                     try {
-                        // Ejecutar en hilo IO para no bloquear la UI
                         val user = withContext(Dispatchers.IO) {
                             db.userDao().getUserByPin(pin)
                         }
-                        
                         if (user != null) {
-                            attempts = 0
                             onLoginSuccess(user)
                         } else {
-                            attempts++
-                            errorMessage = "PIN incorrecto (Intento $attempts)"
+                            errorMessage = "PIN incorrecto"
                             pin = ""
                         }
                     } catch (e: Exception) {
-                        e.printStackTrace()
-                        attempts++
-                        errorMessage = "Error al verificar. Intente de nuevo."
+                        errorMessage = "Error. Intente de nuevo."
                         pin = ""
                     }
-                    
                     isLoading = false
                 }
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             enabled = pin.length == 4 && !isLoading
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            } else {
-                Icon(Icons.Filled.Login, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Ingresar")
-            }
+            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+            else { Icon(Icons.Filled.Login, null); Spacer(Modifier.width(8.dp)); Text("Ingresar") }
         }
 
         Spacer(Modifier.height(16.dp))
-        TextButton(onClick = onFirstTimeSetup) {
-            Text("Configurar usuarios")
-        }
+        TextButton(onClick = onFirstTimeSetup) { Text("Configurar usuarios") }
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = { showChangePin = true }) {
-            Text("Cambiar mi PIN")
-        }
+        TextButton(onClick = { showChangePin = true }) { Text("Cambiar mi PIN") }
     }
 
-    // Diálogo: Crear Administrador (primera instalación)
+    // Diálogo: Crear Admin
     if (showCreateAdminDialog) {
         var adminName by remember { mutableStateOf("") }
         var adminPin by remember { mutableStateOf("") }
         var confirmPin by remember { mutableStateOf("") }
 
         AlertDialog(
-            onDismissRequest = { /* No se puede cerrar */ },
+            onDismissRequest = {},
             title = { Text("Configuración Inicial") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Bienvenido a Nexus Admin. Crea tu cuenta de Administrador:",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    OutlinedTextField(
-                        adminName,
-                        { adminName = it },
-                        label = { Text("Tu nombre *") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Text("Bienvenido. Crea tu cuenta de Administrador:", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(adminName, { adminName = it }, label = { Text("Tu nombre *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     HorizontalDivider()
                     Text("Crea tu PIN de acceso:", fontWeight = FontWeight.SemiBold)
-                    OutlinedTextField(
-                        adminPin,
-                        { if (it.length <= 4 && it.all { c -> c.isDigit() }) adminPin = it },
-                        label = { Text("PIN (4 dígitos) *") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        confirmPin,
-                        { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it },
-                        label = { Text("Confirmar PIN *") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        modifier = Modifier.fillMaxWidth(),
-                        isError = confirmPin.isNotEmpty() && adminPin != confirmPin
-                    )
-                    if (confirmPin.isNotEmpty() && adminPin != confirmPin) {
-                        Text(
-                            "Los PIN no coinciden",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    Card(
-                        Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Text(
-                            "🔐 Guarda bien tu PIN. Es la llave de acceso como Administrador.",
-                            modifier = Modifier.padding(12.dp),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    OutlinedTextField(adminPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) adminPin = it }, label = { Text("PIN (4 dígitos) *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN *") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth())
+                    if (confirmPin.isNotEmpty() && adminPin != confirmPin) Text("Los PIN no coinciden", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
-                        if (adminName.isNotBlank() && adminPin.length == 4 && adminPin == confirmPin) {
-                            try {
-                                withContext(Dispatchers.IO) {
-                                    db.userDao().insert(
-                                        User(name = adminName, pin = adminPin, role = "admin")
-                                    )
-                                }
-                                withContext(Dispatchers.Main) {
-                                    showCreateAdminDialog = false
-                                    Toast.makeText(
-                                        context,
-                                        "✅ Administrador creado. Ingresa con tu PIN",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(
-                                        context,
-                                        "❌ Error al crear: ${e.message}",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
+                        if (adminName.isBlank() || adminPin.length != 4 || adminPin != confirmPin) {
+                            Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show()
+                            return@launch
+                        }
+                        try {
+                            withContext(Dispatchers.IO) {
+                                db.userDao().insert(User(name = adminName, pin = adminPin, role = "admin"))
                             }
-                        } else {
-                            Toast.makeText(
-                                context,
-                                "❌ Completa todos los campos correctamente",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            showCreateAdminDialog = false
+                            Toast.makeText(context, "✅ Admin creado. Ingresa con tu PIN", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }) { Text("Crear Administrador") }
             },
-            dismissButton = null // No se puede cerrar sin crear admin
+            dismissButton = null
         )
     }
 
@@ -270,84 +169,31 @@ fun LoginScreen(
             title = { Text("Cambiar PIN") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        currentPin,
-                        { if (it.length <= 4 && it.all { c -> c.isDigit() }) currentPin = it },
-                        label = { Text("PIN actual") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
-                    )
+                    OutlinedTextField(currentPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) currentPin = it }, label = { Text("PIN actual") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
                     HorizontalDivider()
-                    OutlinedTextField(
-                        newPin,
-                        { if (it.length <= 4 && it.all { c -> c.isDigit() }) newPin = it },
-                        label = { Text("Nuevo PIN") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
-                    )
-                    OutlinedTextField(
-                        confirmNewPin,
-                        { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmNewPin = it },
-                        label = { Text("Confirmar nuevo PIN") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
-                    )
+                    OutlinedTextField(newPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) newPin = it }, label = { Text("Nuevo PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+                    OutlinedTextField(confirmNewPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmNewPin = it }, label = { Text("Confirmar") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
                         try {
-                            val user = withContext(Dispatchers.IO) {
-                                db.userDao().getUserByPin(currentPin)
-                            }
+                            val user = withContext(Dispatchers.IO) { db.userDao().getUserByPin(currentPin) }
                             if (user != null && newPin.length == 4 && newPin == confirmNewPin) {
-                                val existingPin = withContext(Dispatchers.IO) {
-                                    db.userDao().getUserByPin(newPin)
-                                }
-                                if (existingPin != null && existingPin.id != user.id) {
-                                    Toast.makeText(
-                                        context,
-                                        "❌ Ese PIN ya está en uso",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    return@launch
-                                }
-                                withContext(Dispatchers.IO) {
-                                    db.userDao().update(user.copy(pin = newPin))
-                                }
+                                withContext(Dispatchers.IO) { db.userDao().update(user.copy(pin = newPin)) }
                                 showChangePin = false
-                                Toast.makeText(
-                                    context,
-                                    "✅ PIN actualizado correctamente",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                Toast.makeText(context, "✅ PIN actualizado", Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(
-                                    context,
-                                    "❌ Verifique los datos ingresados",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                Toast.makeText(context, "❌ Datos incorrectos", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
-                            e.printStackTrace()
-                            Toast.makeText(
-                                context,
-                                "❌ Error: ${e.message}",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }
-                }) { Text("Cambiar PIN") }
+                }) { Text("Cambiar") }
             },
-            dismissButton = {
-                TextButton(onClick = { showChangePin = false }) {
-                    Text("Cancelar")
-                }
-            }
+            dismissButton = { TextButton(onClick = { showChangePin = false }) { Text("Cancelar") } }
         )
     }
 }
