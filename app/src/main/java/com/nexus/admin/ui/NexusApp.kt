@@ -37,15 +37,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun NexusApp() {
     val context = LocalContext.current
-    val db = remember {
-        try {
-            AppDatabase.getDatabase(context)
-        } catch (e: Exception) {
-            Log.e("NexusApp", "Error getting database: ${e.message}", e)
-            Toast.makeText(context, "Error de base de datos: ${e.message}", Toast.LENGTH_LONG).show()
-            AppDatabase.getDatabase(context) // Reintentar
-        }
-    }
+    val db = remember { AppDatabase.getDatabase(context) }
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
 
@@ -58,43 +50,27 @@ fun NexusApp() {
     // ========== PANTALLA 1: LOGIN ==========
     if (currentUser == null) {
         if (showUserManagement) {
-            try {
-                UserManagementScreen(db = db, onBack = { showUserManagement = false })
-            } catch (e: Exception) {
-                Log.e("NexusApp", "Error in UserManagement: ${e.message}", e)
-                showUserManagement = false
-            }
+            UserManagementScreen(db = db, onBack = { showUserManagement = false })
         } else {
-            try {
-                LoginScreen(
-                    db = db,
-                    onLoginSuccess = { currentUser = it },
-                    onFirstTimeSetup = { showUserManagement = true }
-                )
-            } catch (e: Exception) {
-                Log.e("NexusApp", "Error in Login: ${e.message}", e)
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+            LoginScreen(
+                db = db,
+                onLoginSuccess = { currentUser = it },
+                onFirstTimeSetup = { showUserManagement = true }
+            )
         }
         return
     }
 
     // ========== PANTALLA 2: SELECCIÓN DE NEGOCIO ==========
     if (showBusinessSetup) {
-        try {
-            BusinessSetupScreen(
-                db = db,
-                onBusinessSelected = { business ->
-                    currentBusiness = business
-                    showBusinessSetup = false
-                },
-                onBack = { showBusinessSetup = false }
-            )
-        } catch (e: Exception) {
-            Log.e("NexusApp", "Error in BusinessSetup: ${e.message}", e)
-            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            showBusinessSetup = false
-        }
+        BusinessSetupScreen(
+            db = db,
+            onBusinessSelected = { business ->
+                currentBusiness = business
+                showBusinessSetup = false
+            },
+            onBack = { showBusinessSetup = false }
+        )
         return
     }
 
@@ -106,14 +82,7 @@ fun NexusApp() {
     var unreadCount by remember { mutableStateOf(0) }
     var isSidebarExpanded by remember { mutableStateOf(false) }
 
-    val syncManager = remember {
-        try {
-            OfflineSyncManager(context, db)
-        } catch (e: Exception) {
-            Log.e("NexusApp", "Error creating SyncManager: ${e.message}", e)
-            OfflineSyncManager(context, db)
-        }
-    }
+    val syncManager = remember { OfflineSyncManager(context, db) }
     var showSyncExportQr by remember { mutableStateOf(false) }
     var showSyncImportScanner by remember { mutableStateOf(false) }
     var syncQrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -125,20 +94,16 @@ fun NexusApp() {
                 unreadCount = it.count { n -> !n.read }
             }
         } catch (e: Exception) {
-            Log.e("NexusApp", "Error loading notifications: ${e.message}", e)
+            Log.e("NexusApp", "Error notifications: ${e.message}", e)
         }
     }
 
     fun navigateTo(screen: Screen) {
-        try {
-            selectedScreen = screen
-            navController.navigate(screen.route) {
-                popUpTo(Screen.Dashboard.route) { saveState = true }
-                launchSingleTop = true
-                restoreState = true
-            }
-        } catch (e: Exception) {
-            Log.e("NexusApp", "Error navigating: ${e.message}", e)
+        selectedScreen = screen
+        navController.navigate(screen.route) {
+            popUpTo(Screen.Dashboard.route) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
         }
     }
 
@@ -148,32 +113,24 @@ fun NexusApp() {
     }
 
     LaunchedEffect(currentUser) {
-        try {
-            val prefs = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE)
-            val hasSeenHelp = prefs.getBoolean("has_seen_help", false)
-            if (!hasSeenHelp) {
-                showHelp = true
-                prefs.edit().putBoolean("has_seen_help", true).apply()
-            }
-        } catch (e: Exception) {
-            Log.e("NexusApp", "Error checking help: ${e.message}", e)
+        val prefs = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE)
+        val hasSeenHelp = prefs.getBoolean("has_seen_help", false)
+        if (!hasSeenHelp) {
+            showHelp = true
+            prefs.edit().putBoolean("has_seen_help", true).apply()
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
-            try {
-                Sidebar(
-                    selectedItem = selectedScreen,
-                    onItemSelected = { navigateTo(it) },
-                    isExpanded = isSidebarExpanded,
-                    onToggle = { isSidebarExpanded = !isSidebarExpanded },
-                    onClose = { isSidebarExpanded = false },
-                    isAdmin = isAdmin
-                )
-            } catch (e: Exception) {
-                Log.e("NexusApp", "Error in Sidebar: ${e.message}", e)
-            }
+            Sidebar(
+                selectedItem = selectedScreen,
+                onItemSelected = { navigateTo(it) },
+                isExpanded = isSidebarExpanded,
+                onToggle = { isSidebarExpanded = !isSidebarExpanded },
+                onClose = { isSidebarExpanded = false },
+                isAdmin = isAdmin
+            )
 
             Column(modifier = Modifier.weight(1f)) {
                 SmallTopAppBar(
@@ -197,10 +154,7 @@ fun NexusApp() {
                                         showSyncExportQr = false
                                         syncQrBitmap = null
                                         withContext(Dispatchers.IO) {
-                                            val data = syncManager.exportSalesToQr(
-                                                currentUser!!.name,
-                                                currentBusiness!!.code
-                                            )
+                                            val data = syncManager.exportSalesToQr(currentUser!!.name, currentBusiness!!.code)
                                             if (data.isNotEmpty()) {
                                                 syncQrBitmap = QrCodeGenerator.generateQrCode(data)
                                                 withContext(Dispatchers.Main) { showSyncExportQr = true }
@@ -211,7 +165,7 @@ fun NexusApp() {
                                             }
                                         }
                                     } catch (e: Exception) {
-                                        Log.e("NexusApp", "Error exporting QR: ${e.message}", e)
+                                        Log.e("NexusApp", "Error sync: ${e.message}", e)
                                         withContext(Dispatchers.Main) {
                                             Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_SHORT).show()
                                         }
@@ -245,21 +199,16 @@ fun NexusApp() {
                         interactionSource = remember { MutableInteractionSource() }
                     ) { closeAllToggles() }
                 ) {
-                    try {
-                        NavHost(navController, startDestination = Screen.Dashboard.route, modifier = Modifier.fillMaxSize()) {
-                            composable(Screen.Dashboard.route) { DashboardScreen(isAdmin = isAdmin) }
-                            composable(Screen.Inventory.route) { InventoryScreen(isAdmin = isAdmin) }
-                            composable(Screen.Sales.route) { SalesScreen() }
-                            composable(Screen.Cash.route) { if (isAdmin) CashScreen() }
-                            composable(Screen.Expenses.route) { if (isAdmin) ExpensesScreen() }
-                            composable(Screen.Receivables.route) { if (isAdmin) ReceivablesScreen() }
-                            composable(Screen.Shrinkage.route) { if (isAdmin) ShrinkageScreen() }
-                            composable(Screen.Reports.route) { if (isAdmin) ReportsScreen() }
-                            composable(Screen.Backup.route) { if (isAdmin) BackupScreen() }
-                        }
-                    } catch (e: Exception) {
-                        Log.e("NexusApp", "Error in NavHost: ${e.message}", e)
-                        Text("Error cargando pantalla: ${e.message}", modifier = Modifier.padding(16.dp))
+                    NavHost(navController, startDestination = Screen.Dashboard.route, modifier = Modifier.fillMaxSize()) {
+                        composable(Screen.Dashboard.route) { DashboardScreen(isAdmin = isAdmin) }
+                        composable(Screen.Inventory.route) { InventoryScreen(isAdmin = isAdmin) }
+                        composable(Screen.Sales.route) { SalesScreen() }
+                        composable(Screen.Cash.route) { if (isAdmin) CashScreen() }
+                        composable(Screen.Expenses.route) { if (isAdmin) ExpensesScreen() }
+                        composable(Screen.Receivables.route) { if (isAdmin) ReceivablesScreen() }
+                        composable(Screen.Shrinkage.route) { if (isAdmin) ShrinkageScreen() }
+                        composable(Screen.Reports.route) { if (isAdmin) ReportsScreen() }
+                        composable(Screen.Backup.route) { if (isAdmin) BackupScreen() }
                     }
                 }
             }
@@ -275,29 +224,13 @@ fun NexusApp() {
                 notifications = notifications,
                 onNotificationClick = { n ->
                     scope.launch {
-                        try {
-                            db.notificationDao().update(n.copy(read = true))
-                            showNotifications = false
-                        } catch (e: Exception) {
-                            Log.e("NexusApp", "Error marking notification: ${e.message}", e)
-                        }
+                        try { db.notificationDao().update(n.copy(read = true)); showNotifications = false }
+                        catch (e: Exception) { Log.e("NexusApp", "Error notif: ${e.message}", e) }
                     }
                 },
-                onMarkAsRead = { n ->
-                    scope.launch {
-                        try { db.notificationDao().update(n.copy(read = true)) } catch (e: Exception) {}
-                    }
-                },
-                onDelete = { n ->
-                    scope.launch {
-                        try { db.notificationDao().delete(n) } catch (e: Exception) {}
-                    }
-                },
-                onMarkAllRead = {
-                    scope.launch {
-                        try { db.notificationDao().markAllAsRead() } catch (e: Exception) {}
-                    }
-                }
+                onMarkAsRead = { n -> scope.launch { try { db.notificationDao().update(n.copy(read = true)) } catch (_: Exception) {} } },
+                onDelete = { n -> scope.launch { try { db.notificationDao().delete(n) } catch (_: Exception) {} } },
+                onMarkAllRead = { scope.launch { try { db.notificationDao().markAllAsRead() } catch (_: Exception) {} } }
             )
         }
 
@@ -327,8 +260,7 @@ fun NexusApp() {
                                 Toast.makeText(context, "✅ ${result.salesImported} ventas de ${result.workerName}", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
-                            Log.e("NexusApp", "Error importing QR: ${e.message}", e)
-                            Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            Log.e("NexusApp", "Error import: ${e.message}", e)
                         }
                     }
                 },
@@ -337,12 +269,7 @@ fun NexusApp() {
         }
 
         if (showHelp) {
-            try {
-                HelpScreen(onDismiss = { showHelp = false })
-            } catch (e: Exception) {
-                Log.e("NexusApp", "Error in Help: ${e.message}", e)
-                showHelp = false
-            }
+            HelpScreen(onDismiss = { showHelp = false })
         }
     }
 }
