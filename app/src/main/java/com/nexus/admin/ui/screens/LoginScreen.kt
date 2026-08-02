@@ -17,6 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nexus.admin.data.AppDatabase
 import com.nexus.admin.data.entity.User
+import kotlinx.coroutines.runBlocking
 
 @Composable
 fun LoginScreen(
@@ -30,32 +31,12 @@ fun LoginScreen(
     var showCreateAdminDialog by remember { mutableStateOf(false) }
     var showChangePin by remember { mutableStateOf(false) }
 
-    // Verificar admin al iniciar - SIN CORRUTINAS
     LaunchedEffect(Unit) {
         try {
-            val admin = db.userDao().getAdmin()
-            if (admin == null) {
-                showCreateAdminDialog = true
-            }
+            val admin = runBlocking { db.userDao().getAdmin() }
+            if (admin == null) showCreateAdminDialog = true
         } catch (e: Exception) {
             showCreateAdminDialog = true
-        }
-    }
-
-    fun doLogin() {
-        if (pin.length != 4) return
-        
-        try {
-            val user = db.userDao().getUserByPin(pin)
-            if (user != null) {
-                onLoginSuccess(user)
-            } else {
-                errorMessage = "PIN incorrecto"
-                pin = ""
-            }
-        } catch (e: Exception) {
-            errorMessage = "Error. Intente de nuevo."
-            pin = ""
         }
     }
 
@@ -89,7 +70,21 @@ fun LoginScreen(
         Spacer(Modifier.height(24.dp))
 
         Button(
-            onClick = { doLogin() },
+            onClick = {
+                if (pin.length != 4) return@Button
+                try {
+                    val user = runBlocking { db.userDao().getUserByPin(pin) }
+                    if (user != null) {
+                        onLoginSuccess(user)
+                    } else {
+                        errorMessage = "PIN incorrecto"
+                        pin = ""
+                    }
+                } catch (e: Exception) {
+                    errorMessage = "Error. Intente de nuevo."
+                    pin = ""
+                }
+            },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             enabled = pin.length == 4
         ) {
@@ -98,31 +93,13 @@ fun LoginScreen(
             Text("Ingresar")
         }
 
-        // Botón para login rápido si falla
-        Spacer(Modifier.height(8.dp))
-        TextButton(onClick = {
-            // Intentar login con PIN 0000 como emergencia
-            try {
-                val user = db.userDao().getUserByPin("0000")
-                if (user != null) {
-                    onLoginSuccess(user)
-                } else {
-                    Toast.makeText(context, "No hay admin con PIN 0000. Cree uno nuevo.", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }) {
-            Text("Acceso rápido (PIN 0000)")
-        }
-
         Spacer(Modifier.height(16.dp))
         TextButton(onClick = onFirstTimeSetup) { Text("Configurar usuarios") }
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = { showChangePin = true }) { Text("Cambiar mi PIN") }
     }
 
-    // Diálogo: Crear Admin
+    // Crear Admin
     if (showCreateAdminDialog) {
         var adminName by remember { mutableStateOf("") }
         var adminPin by remember { mutableStateOf("") }
@@ -147,7 +124,7 @@ fun LoginScreen(
                         return@Button
                     }
                     try {
-                        db.userDao().insert(User(name = adminName, pin = adminPin, role = "admin"))
+                        runBlocking { db.userDao().insert(User(name = adminName, pin = adminPin, role = "admin")) }
                         showCreateAdminDialog = false
                         Toast.makeText(context, "✅ Admin creado. Ingresa con tu PIN", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
@@ -159,7 +136,7 @@ fun LoginScreen(
         )
     }
 
-    // Diálogo: Cambiar PIN
+    // Cambiar PIN
     if (showChangePin) {
         var currentPin by remember { mutableStateOf("") }
         var newPin by remember { mutableStateOf("") }
@@ -178,9 +155,9 @@ fun LoginScreen(
             confirmButton = {
                 Button(onClick = {
                     try {
-                        val user = db.userDao().getUserByPin(currentPin)
+                        val user = runBlocking { db.userDao().getUserByPin(currentPin) }
                         if (user != null && newPin.length == 4 && newPin == confirmNewPin) {
-                            db.userDao().update(user.copy(pin = newPin))
+                            runBlocking { db.userDao().update(user.copy(pin = newPin)) }
                             showChangePin = false
                             Toast.makeText(context, "✅ PIN actualizado", Toast.LENGTH_SHORT).show()
                         } else {
