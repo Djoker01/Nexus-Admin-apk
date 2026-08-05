@@ -247,8 +247,8 @@ fun InventoryScreen(isAdmin: Boolean = true) {
     }
 }
 
-// ========== FUNCIÓN DE EXPORTACIÓN A EXCEL (CORREGIDA) ==========
-suspend fun exportToExcel(context: android.content.Context, db: AppDatabase, uri: Uri) {
+// ========== FUNCIÓN DE EXPORTACIÓN A EXCEL (ULTRA SIMPLIFICADA) ==========
+suspend fun exportToExcel(context: android.content.Context, db: AppDatabase, uri: android.net.Uri) {
     try {
         val products = db.productDao().getAllProductsOnce()
         
@@ -262,22 +262,14 @@ suspend fun exportToExcel(context: android.content.Context, db: AppDatabase, uri
         val workbook = XSSFWorkbook()
         val sheet = workbook.createSheet("Inventario")
         
-        val headerFont = workbook.createFont().apply {
-            bold = true
-            fontHeightInPoints = 12
-        }
-        val headerStyle = workbook.createCellStyle().apply {
-            setFont(headerFont)
-        }
-        
-        val headers = arrayOf("ID", "Nombre", "SKU", "Categoría", "Costo", "Precio", "Stock", "Stock Mín", "Ganancia", "Margen %")
+        // Encabezados simples
+        val headers = arrayOf("ID", "Nombre", "SKU", "Categoría", "Costo", "Precio", "Stock", "Stock Mín", "Ganancia")
         val headerRow = sheet.createRow(0)
         headers.forEachIndexed { i, h -> headerRow.createCell(i).setCellValue(h) }
         
+        // Datos
         products.forEachIndexed { ri, p ->
             val row = sheet.createRow(ri + 1)
-            val profit = p.price - p.cost
-            val margin = if (p.cost > 0) ((profit / p.cost) * 100) else 0.0
             row.createCell(0).setCellValue(p.id.toDouble())
             row.createCell(1).setCellValue(p.name)
             row.createCell(2).setCellValue(p.sku)
@@ -286,16 +278,14 @@ suspend fun exportToExcel(context: android.content.Context, db: AppDatabase, uri
             row.createCell(5).setCellValue(p.price)
             row.createCell(6).setCellValue(p.stock.toDouble())
             row.createCell(7).setCellValue(p.minStock.toDouble())
-            row.createCell(8).setCellValue(profit)
-            row.createCell(9).setCellValue(Math.round(margin * 100.0) / 100.0)
+            row.createCell(8).setCellValue(p.price - p.cost)
         }
         
-        for (i in 0..9) sheet.autoSizeColumn(i)
-        
-        // Guardar
-        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+        // Guardar archivo
+        val outputStream = context.contentResolver.openOutputStream(uri)
+        if (outputStream != null) {
             workbook.write(outputStream)
-            outputStream.flush()
+            outputStream.close()
         }
         workbook.close()
         
@@ -309,6 +299,7 @@ suspend fun exportToExcel(context: android.content.Context, db: AppDatabase, uri
         }
     }
 }
+
 
 // ========== FUNCIÓN DE IMPORTACIÓN DESDE EXCEL ==========
 suspend fun importFromExcel(context: android.content.Context, db: AppDatabase, uri: Uri) {
