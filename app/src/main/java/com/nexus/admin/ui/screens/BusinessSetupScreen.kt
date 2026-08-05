@@ -41,6 +41,7 @@ fun BusinessSetupScreen(
     var businesses by remember { mutableStateOf<List<Business>>(emptyList()) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
+    var showQrDialog by remember { mutableStateOf<Business?>(null) }
 
     LaunchedEffect(Unit) {
         try {
@@ -78,16 +79,24 @@ fun BusinessSetupScreen(
             Text("Negocios guardados:", fontWeight = FontWeight.SemiBold)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(businesses) { business ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { onBusinessSelected(business) }
-                    ) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(Icons.Filled.Store, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(business.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
                                 Text("Código: ${business.code}", style = MaterialTheme.typography.bodyMedium)
+                            }
+                            // BOTÓN PARA MOSTRAR QR
+                            IconButton(onClick = { showQrDialog = business }) {
+                                Icon(Icons.Filled.QrCode, "Mostrar QR", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                            }
+                            // BOTÓN PARA ENTRAR AL NEGOCIO
+                            IconButton(onClick = { onBusinessSelected(business) }) {
+                                Icon(Icons.Filled.ArrowForward, "Entrar", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -96,20 +105,13 @@ fun BusinessSetupScreen(
         }
     }
 
-    // ========== CREAR NEGOCIO (CON QR) ==========
+    // ========== CREAR NEGOCIO ==========
     if (showCreateDialog) {
         var name by remember { mutableStateOf("") }
         var ownerName by remember { mutableStateOf("") }
         val code = remember { "NX-${UUID.randomUUID().toString().take(6).uppercase()}" }
-        
-        // Generar QR de forma síncrona para asegurar que funcione
         val qrBitmap = remember(code) {
-            try {
-                QrCodeGenerator.generateQrCode(code, 400)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
+            try { QrCodeGenerator.generateQrCode(code, 400) } catch (e: Exception) { null }
         }
 
         AlertDialog(
@@ -121,62 +123,41 @@ fun BusinessSetupScreen(
                     OutlinedTextField(ownerName, { ownerName = it }, label = { Text("Tu nombre (Admin) *") }, singleLine = true)
                     
                     HorizontalDivider()
-                    
-                    // CÓDIGO QR
                     Text("Código QR del negocio:", fontWeight = FontWeight.Bold)
                     Text("El trabajador debe escanear este QR para conectarse", style = MaterialTheme.typography.bodySmall)
                     
-                    Box(
-                        modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally), contentAlignment = Alignment.Center) {
                         if (qrBitmap != null) {
-                            Image(
-                                bitmap = qrBitmap!!.asImageBitmap(),
-                                contentDescription = "QR del negocio",
-                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
-                            )
+                            Image(bitmap = qrBitmap!!.asImageBitmap(), contentDescription = "QR", modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)))
                         } else {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Filled.Error, null, tint = MaterialTheme.colorScheme.error)
-                                Text("Error al generar QR", color = MaterialTheme.colorScheme.error)
-                            }
+                            Text("Error al generar QR", color = MaterialTheme.colorScheme.error)
                         }
                     }
                     
-                    // Código en texto
-                    Card(
-                        Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                    ) {
-                        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(code, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            OutlinedButton(onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("Código", code))
-                                Toast.makeText(context, "✅ Código copiado", Toast.LENGTH_SHORT).show()
-                            }) {
-                                Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(16.dp))
-                                Text("Copiar código")
-                            }
-                        }
+                    Text(code, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    
+                    OutlinedButton(onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Código", code))
+                        Toast.makeText(context, "✅ Código copiado", Toast.LENGTH_SHORT).show()
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(16.dp))
+                        Text("Copiar código")
                     }
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     if (name.isBlank() || ownerName.isBlank()) {
-                        Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Completa los campos", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
                     try {
-                        runBlocking {
-                            db.businessDao().insert(Business(name = name.trim(), code = code, ownerName = ownerName.trim()))
-                        }
+                        runBlocking { db.businessDao().insert(Business(name = name.trim(), code = code, ownerName = ownerName.trim())) }
                         showCreateDialog = false
-                        Toast.makeText(context, "✅ Negocio creado exitosamente", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "✅ Negocio creado", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
-                        Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }) { Text("CREAR NEGOCIO", fontWeight = FontWeight.Bold) }
             },
@@ -193,11 +174,7 @@ fun BusinessSetupScreen(
 
         if (showScanner) {
             FloatingBarcodeScanner(
-                onBarcodeScanned = { scannedCode ->
-                    joinCode = scannedCode.trim().uppercase()
-                    showScanner = false
-                    Toast.makeText(context, "✅ Código: $joinCode", Toast.LENGTH_SHORT).show()
-                },
+                onBarcodeScanned = { code -> joinCode = code.trim().uppercase(); showScanner = false },
                 onDismiss = { showScanner = false }
             )
         }
@@ -208,15 +185,12 @@ fun BusinessSetupScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(joinCode, { joinCode = it.trim().uppercase() }, label = { Text("Código del negocio *") }, singleLine = true)
-                    
                     Button(onClick = { showScanner = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.QrCodeScanner, null, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("ESCANEAR QR DEL ADMIN")
+                        Text("ESCANEAR QR")
                     }
-                    
                     HorizontalDivider()
-                    
                     OutlinedTextField(workerName, { workerName = it }, label = { Text("Tu nombre *") }, singleLine = true)
                     OutlinedTextField(workerPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) workerPin = it }, label = { Text("PIN de 4 dígitos *") }, singleLine = true)
                 }
@@ -234,11 +208,8 @@ fun BusinessSetupScreen(
                             list
                         }
                         val business = allBusinesses.find { it.code.equals(joinCode, ignoreCase = true) }
-                        
                         if (business != null) {
-                            runBlocking {
-                                db.userDao().insert(User(name = workerName.trim(), pin = workerPin, role = "worker"))
-                            }
+                            runBlocking { db.userDao().insert(User(name = workerName.trim(), pin = workerPin, role = "worker")) }
                             onBusinessSelected(business)
                             showJoinDialog = false
                             Toast.makeText(context, "✅ Conectado a: ${business.name}", Toast.LENGTH_SHORT).show()
@@ -246,11 +217,54 @@ fun BusinessSetupScreen(
                             Toast.makeText(context, "❌ Código no encontrado: $joinCode", Toast.LENGTH_LONG).show()
                         }
                     } catch (e: Exception) {
-                        Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }) { Text("UNIRSE AL NEGOCIO", fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { showJoinDialog = false }) { Text("Cancelar") } }
+        )
+    }
+
+    // ========== MOSTRAR QR DE NEGOCIO EXISTENTE ==========
+    showQrDialog?.let { business ->
+        val qrBitmap = remember(business.code) {
+            try { QrCodeGenerator.generateQrCode(business.code, 400) } catch (e: Exception) { null }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showQrDialog = null },
+            title = { Text("QR de: ${business.name}", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Muestra este QR a tus trabajadores para que se conecten", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Box(modifier = Modifier.size(250.dp), contentAlignment = Alignment.Center) {
+                        if (qrBitmap != null) {
+                            Image(bitmap = qrBitmap!!.asImageBitmap(), contentDescription = "QR", modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)))
+                        } else {
+                            Text("Error al generar QR", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(12.dp))
+                    
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Código: ${business.code}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            OutlinedButton(onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Código", business.code))
+                                Toast.makeText(context, "✅ Código copiado", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(16.dp))
+                                Text("Copiar código")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showQrDialog = null }) { Text("Cerrar") } }
         )
     }
 }
