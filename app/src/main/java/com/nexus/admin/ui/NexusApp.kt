@@ -86,6 +86,7 @@ fun NexusApp() {
     var showSyncExportQr by remember { mutableStateOf(false) }
     var showSyncImportScanner by remember { mutableStateOf(false) }
     var syncQrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var showSyncMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         try {
@@ -145,35 +146,56 @@ fun NexusApp() {
                             Icon(Icons.Filled.HelpOutline, "Ayuda")
                         }
 
+                        // BOTÓN SYNC CON MENÚ PARA TRABAJADOR
                         IconButton(onClick = {
                             if (isAdmin) {
                                 showSyncImportScanner = true
                             } else {
-                                scope.launch {
-                                    try {
-                                        showSyncExportQr = false
-                                        syncQrBitmap = null
-                                        withContext(Dispatchers.IO) {
-                                            val data = syncManager.exportSalesToQr(currentUser!!.name, currentBusiness!!.code)
-                                            if (data.isNotEmpty()) {
-                                                syncQrBitmap = QrCodeGenerator.generateQrCode(data)
-                                                withContext(Dispatchers.Main) { showSyncExportQr = true }
-                                            } else {
-                                                withContext(Dispatchers.Main) {
-                                                    Toast.makeText(context, "⚠️ No hay ventas para exportar", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e("NexusApp", "Error sync: ${e.message}", e)
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
+                                showSyncMenu = true
                             }
                         }) {
                             Icon(Icons.Filled.Sync, "Sincronizar")
+                        }
+
+                        DropdownMenu(
+                            expanded = showSyncMenu,
+                            onDismissRequest = { showSyncMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("📤 Exportar mis ventas") },
+                                onClick = {
+                                    showSyncMenu = false
+                                    scope.launch {
+                                        try {
+                                            showSyncExportQr = false
+                                            syncQrBitmap = null
+                                            withContext(Dispatchers.IO) {
+                                                val data = syncManager.exportSalesToQr(currentUser!!.name, currentBusiness!!.code)
+                                                if (data.isNotEmpty()) {
+                                                    syncQrBitmap = QrCodeGenerator.generateQrCode(data)
+                                                    withContext(Dispatchers.Main) { showSyncExportQr = true }
+                                                } else {
+                                                    withContext(Dispatchers.Main) {
+                                                        Toast.makeText(context, "⚠️ No hay ventas para exportar", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("NexusApp", "Error export: ${e.message}", e)
+                                            Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                leadingIcon = { Icon(Icons.Filled.Upload, null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("📥 Actualizar desde Admin") },
+                                onClick = {
+                                    showSyncMenu = false
+                                    showSyncImportScanner = true
+                                },
+                                leadingIcon = { Icon(Icons.Filled.Download, null) }
+                            )
                         }
 
                         BadgedBox(badge = { if (unreadCount > 0) Badge { Text("$unreadCount") } }) {
@@ -184,11 +206,7 @@ fun NexusApp() {
 
                         Text(currentUser?.name?.firstOrNull()?.toString() ?: "?", modifier = Modifier.padding(8.dp))
                         IconButton(onClick = { showBusinessSetup = true }) { Icon(Icons.Filled.Store, "Cambiar negocio") }
-                        IconButton(onClick = {
-                            currentUser = null
-                            currentBusiness = null
-                            showBusinessSetup = true
-                        }) { Icon(Icons.Filled.Logout, "Salir") }
+                        IconButton(onClick = { currentUser = null; currentBusiness = null; showBusinessSetup = true }) { Icon(Icons.Filled.Logout, "Salir") }
                     },
                     colors = TopAppBarDefaults.smallTopAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
                 )
@@ -225,7 +243,7 @@ fun NexusApp() {
                 onNotificationClick = { n ->
                     scope.launch {
                         try { db.notificationDao().update(n.copy(read = true)); showNotifications = false }
-                        catch (e: Exception) { Log.e("NexusApp", "Error notif: ${e.message}", e) }
+                        catch (e: Exception) { Log.e("NexusApp", "Error: ${e.message}", e) }
                     }
                 },
                 onMarkAsRead = { n -> scope.launch { try { db.notificationDao().update(n.copy(read = true)) } catch (_: Exception) {} } },
@@ -237,7 +255,7 @@ fun NexusApp() {
         if (showSyncExportQr && syncQrBitmap != null) {
             AlertDialog(
                 onDismissRequest = { showSyncExportQr = false },
-                title = { Text("QR de Ventas del Día") },
+                title = { Text("📤 Exportar Ventas") },
                 text = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Muestra este QR al administrador")
@@ -268,8 +286,6 @@ fun NexusApp() {
             )
         }
 
-        if (showHelp) {
-            HelpScreen(onDismiss = { showHelp = false })
-        }
+        if (showHelp) { HelpScreen(onDismiss = { showHelp = false }) }
     }
 }
