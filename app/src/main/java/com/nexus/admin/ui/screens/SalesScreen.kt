@@ -244,16 +244,73 @@ fun SalesScreen() {
             dismissButton = { TextButton(onClick = { showSaleDialog = false; editingSale = null }) { Text("Cancelar") } }
         )
 
-        // Escáner
+                // Escáner
         if (showScanner) {
-            FloatingBarcodeScanner(onBarcodeScanned = { barcode -> scope.launch { val prods = db.productDao().getAllProducts().first(); prods.find { it.sku == barcode }?.let { p -> if (p.stock > 0 && !selectedProducts.containsKey(p.id)) selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 } } }; showScanner = false }, onDismiss = { showScanner = false })
+            FloatingBarcodeScanner(
+                onBarcodeScanned = { barcode ->
+                    scope.launch {
+                        val prods = db.productDao().getAllProducts().first()
+                        prods.find { it.sku == barcode }?.let { p ->
+                            if (p.stock > 0 && !selectedProducts.containsKey(p.id)) {
+                                selectedProducts = selectedProducts.toMutableMap().also {
+                                    it[p.id] = p to 1
+                                }
+                            }
+                        }
+                    }
+                    showScanner = false
+                },
+                onDismiss = { showScanner = false }
+            )
         }
 
         // Selector de productos
         if (showProductPicker) {
-            var s by remember { mutableStateOf("") }
-            val f = remember(allProducts, s) { if (s.isEmpty()) allProducts else allProducts.filter { it.name.contains(s, true) || it.sku.contains(s, true) } }
-            AlertDialog(onDismissRequest = { showProductPicker = false }, title = { Text("Productos") }, text = { Column { OutlinedTextField(s, { s = it }, label = { Text("Buscar") }, singleLine = true, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(8.dp)); LazyColumn(Modifier.heightIn(max = 400.dp)) { items(f) { p -> ListItem(headlineContent = { Text(p.name) }, supportingContent = { Text("Stock: ${p.stock} | $${Utils.formatCurrency(p.price)}") }, modifier = Modifier.clickable { if (p.stock > 0 && !selectedProducts.containsKey(p.id)) { selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 }; showProductPicker = false } }) } } }, confirmButton = { TextButton(onClick = { showProductPicker = false }) { Text("Listo") } })
+            var searchProd by remember { mutableStateOf("") }
+            val filtered = remember(allProducts, searchProd) {
+                if (searchProd.isEmpty()) allProducts
+                else allProducts.filter {
+                    it.name.contains(searchProd, true) || it.sku.contains(searchProd, true)
+                }
+            }
+            AlertDialog(
+                onDismissRequest = { showProductPicker = false },
+                title = { Text("Seleccionar Producto") },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            searchProd, { searchProd = it },
+                            label = { Text("Buscar") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                            items(filtered) { p ->
+                                ListItem(
+                                    headlineContent = { Text(p.name) },
+                                    supportingContent = {
+                                        Text("Stock: ${p.stock} | $${Utils.formatCurrency(p.price)}")
+                                    },
+                                    modifier = Modifier.clickable {
+                                        if (p.stock > 0 && !selectedProducts.containsKey(p.id)) {
+                                            selectedProducts = selectedProducts.toMutableMap().also {
+                                                it[p.id] = p to 1
+                                            }
+                                            showProductPicker = false
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showProductPicker = false }) {
+                        Text("Listo")
+                    }
+                }
+            )
         }
     }
 }
