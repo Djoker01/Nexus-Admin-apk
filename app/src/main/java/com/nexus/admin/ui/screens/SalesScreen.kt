@@ -108,6 +108,7 @@ fun SalesScreen() {
         }
     }
 
+    // ========== DIÁLOGO DE VENTA ==========
     if (showSaleDialog) {
         var client by remember { mutableStateOf(editingSale?.client ?: "") }
         var isReceivable by remember { mutableStateOf(editingSale?.isReceivable ?: false) }
@@ -182,6 +183,7 @@ fun SalesScreen() {
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
+                        // ========== DEVOLUCIÓN ==========
                         if (isReturned && editingSale != null) {
                             val original = editingSale!!
                             val returnSale = Sale(client = original.client, products = original.products, total = -original.total, cost = -original.cost, paymentMethod = "Devolución", paymentMethods = "Devolución", isReceivable = false, isReturned = true)
@@ -190,7 +192,20 @@ fun SalesScreen() {
                             original.products.forEach { sp -> val product = allProducts.find { it.id == sp.productId }; if (product != null) db.productDao().update(product.copy(stock = product.stock + sp.quantity)) }
                             db.cashMovementDao().insert(CashMovement(type = "Egreso", amount = original.total, description = "Devolución venta #${original.id}", date = System.currentTimeMillis()))
                             Toast.makeText(context, "✅ Devolución registrada", Toast.LENGTH_SHORT).show()
-                        } else if (editingSale == null && selectedProducts.isNotEmpty()) {
+                        }
+                        // ========== EDITAR VENTA ==========
+                        else if (editingSale != null && selectedProducts.isNotEmpty()) {
+                            val originalSale = editingSale!!
+                            val productsList = selectedProducts.values.map { (p, q) -> SaleProduct(p.id, p.name, q, p.price, p.cost) }
+                            val totalAmount = productsList.sumOf { it.price * it.quantity }
+                            val totalCost = productsList.sumOf { it.cost * it.quantity }
+                            originalSale.products.forEach { sp -> val product = allProducts.find { it.id == sp.productId }; if (product != null) db.productDao().update(product.copy(stock = product.stock + sp.quantity)) }
+                            selectedProducts.values.forEach { (product, qty) -> db.productDao().update(product.copy(stock = product.stock - qty)) }
+                            db.saleDao().update(originalSale.copy(client = client, products = productsList, total = totalAmount, cost = totalCost, isReceivable = isReceivable))
+                            Toast.makeText(context, "✅ Venta actualizada", Toast.LENGTH_SHORT).show()
+                        }
+                        // ========== NUEVA VENTA ==========
+                        else if (editingSale == null && selectedProducts.isNotEmpty()) {
                             val productsList = selectedProducts.values.map { (p, q) -> SaleProduct(p.id, p.name, q, p.price, p.cost) }
                             val totalAmount = productsList.sumOf { it.price * it.quantity }
                             val totalCost = productsList.sumOf { it.cost * it.quantity }
@@ -205,19 +220,25 @@ fun SalesScreen() {
                             db.saleDao().insert(sale)
                             selectedProducts.values.forEach { (product, qty) -> db.productDao().update(product.copy(stock = product.stock - qty)) }
 
+                            // ✅ CORREGIDO: SOLO registrar en caja si NO es cuenta por cobrar
                             if (!isReceivable) {
-                                if (cashAmt > 0) db.cashMovementDao().insert(CashMovement(type = "Ingreso", amount = cashAmt, description = "Venta efectivo", date = System.currentTimeMillis()))
-                                if (transferAmt > 0) db.cashMovementDao().insert(CashMovement(type = "Ingreso", amount = transferAmt, description = "Venta transferencia", date = System.currentTimeMillis()))
+                                if (cashAmt > 0) db.cashMovementDao().insert(CashMovement(type = "Ingreso", amount = cashAmt, description = "Venta efectivo - ${productsList.size} productos", date = System.currentTimeMillis()))
+                                if (transferAmt > 0) db.cashMovementDao().insert(CashMovement(type = "Ingreso", amount = transferAmt, description = "Venta transferencia - ${productsList.size} productos", date = System.currentTimeMillis()))
                             }
-                            if (isReceivable && combinedTotal < totalAmount) {
-                                db.receivableDao().insert(Receivable(clientName = client, concept = "Venta crédito", totalAmount = totalAmount - combinedTotal, balance = totalAmount - combinedTotal, status = "pending"))
+
+                            // ✅ Si es cuenta por cobrar, crear la cuenta pendiente (NO va a caja)
+                            if (isReceivable) {
+                                val pendingAmount = totalAmount - combinedTotal
+                                db.receivableDao().insert(Receivable(clientName = client, concept = "Venta - ${productsList.size} productos", totalAmount = totalAmount, balance = pendingAmount, status = "pending", date = System.currentTimeMillis()))
                             }
+
                             Toast.makeText(context, "✅ Venta registrada", Toast.LENGTH_SHORT).show()
                         }
-                        showSaleDialog = false; editingSale = null
+                        showSaleDialog = false
+                        editingSale = null
                     }
                 }, enabled = (isReturned && editingSale != null) || selectedProducts.isNotEmpty()) {
-                    Text(if (isReturned) "Confirmar Devolución" else "Completar Venta")
+                    Text(when { isReturned -> "Confirmar Devolución"; editingSale != null -> "Actualizar"; else -> "Completar Venta" })
                 }
             },
             dismissButton = { TextButton(onClick = { showSaleDialog = false; editingSale = null }) { Text("Cancelar") } }
@@ -225,54 +246,14 @@ fun SalesScreen() {
 
         // Escáner
         if (showScanner) {
-            FloatingBarcodeScanner(
-                onBarcodeScanned = { barcode ->
-                    scope.launch {
-                        val prods = db.productDao().getAllProducts().first()
-                        prods.find { it.sku == barcode }?.let { p ->
-                            if (p.stock > 0 && !selectedProducts.containsKey(p.id)) {
-                                selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 }
-                            }
-                        }
-                    }
-                    showScanner = false
-                },
-                onDismiss = { showScanner = false }
-            )
+            FloatingBarcodeScanner(onBarcodeScanned = { barcode -> scope.launch { val prods = db.productDao().getAllProducts().first(); prods.find { it.sku == barcode }?.let { p -> if (p.stock > 0 && !selectedProducts.containsKey(p.id)) selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 } } }; showScanner = false }, onDismiss = { showScanner = false })
         }
 
         // Selector de productos
         if (showProductPicker) {
-            var searchProd by remember { mutableStateOf("") }
-            val filtered = remember(allProducts, searchProd) {
-                if (searchProd.isEmpty()) allProducts
-                else allProducts.filter { it.name.contains(searchProd, true) || it.sku.contains(searchProd, true) }
-            }
-            AlertDialog(
-                onDismissRequest = { showProductPicker = false },
-                title = { Text("Seleccionar Producto") },
-                text = {
-                    Column {
-                        OutlinedTextField(searchProd, { searchProd = it }, label = { Text("Buscar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        Spacer(Modifier.height(8.dp))
-                        LazyColumn(Modifier.heightIn(max = 400.dp)) {
-                            items(filtered) { p ->
-                                ListItem(
-                                    headlineContent = { Text(p.name) },
-                                    supportingContent = { Text("Stock: ${p.stock} | $${Utils.formatCurrency(p.price)}") },
-                                    modifier = Modifier.clickable {
-                                        if (p.stock > 0 && !selectedProducts.containsKey(p.id)) {
-                                            selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 }
-                                            showProductPicker = false
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = { TextButton(onClick = { showProductPicker = false }) { Text("Listo") } }
-            )
+            var s by remember { mutableStateOf("") }
+            val f = remember(allProducts, s) { if (s.isEmpty()) allProducts else allProducts.filter { it.name.contains(s, true) || it.sku.contains(s, true) } }
+            AlertDialog(onDismissRequest = { showProductPicker = false }, title = { Text("Productos") }, text = { Column { OutlinedTextField(s, { s = it }, label = { Text("Buscar") }, singleLine = true, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(8.dp)); LazyColumn(Modifier.heightIn(max = 400.dp)) { items(f) { p -> ListItem(headlineContent = { Text(p.name) }, supportingContent = { Text("Stock: ${p.stock} | $${Utils.formatCurrency(p.price)}") }, modifier = Modifier.clickable { if (p.stock > 0 && !selectedProducts.containsKey(p.id)) { selectedProducts = selectedProducts.toMutableMap().also { it[p.id] = p to 1 }; showProductPicker = false } }) } } }, confirmButton = { TextButton(onClick = { showProductPicker = false }) { Text("Listo") } })
         }
     }
 }
