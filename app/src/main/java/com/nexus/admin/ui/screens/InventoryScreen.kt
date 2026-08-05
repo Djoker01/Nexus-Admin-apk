@@ -264,64 +264,43 @@ suspend fun exportToExcel(context: android.content.Context, db: AppDatabase, uri
         
         val headerFont = workbook.createFont().apply {
             bold = true
-            color = IndexedColors.WHITE.index.toShort()
             fontHeightInPoints = 12
         }
         val headerStyle = workbook.createCellStyle().apply {
             setFont(headerFont)
-            fillForegroundColor = IndexedColors.DARK_BLUE.index.toShort()
-            fillPattern = FillPatternType.SOLID_FOREGROUND
-            alignment = HorizontalAlignment.CENTER
         }
-        val dataFont = workbook.createFont().apply { fontHeightInPoints = 11 }
-        val dataStyle = workbook.createCellStyle().apply { setFont(dataFont) }
         
-        val headers = arrayOf("ID", "Nombre", "SKU", "Categoría", "Costo", "Precio", "Stock", "Stock Mínimo", "Ganancia", "Margen %", "Descripción")
+        val headers = arrayOf("ID", "Nombre", "SKU", "Categoría", "Costo", "Precio", "Stock", "Stock Mín", "Ganancia", "Margen %")
         val headerRow = sheet.createRow(0)
-        headers.forEachIndexed { i, h -> val cell = headerRow.createCell(i); cell.setCellValue(h); cell.cellStyle = headerStyle }
+        headers.forEachIndexed { i, h -> headerRow.createCell(i).setCellValue(h) }
         
         products.forEachIndexed { ri, p ->
             val row = sheet.createRow(ri + 1)
             val profit = p.price - p.cost
             val margin = if (p.cost > 0) ((profit / p.cost) * 100) else 0.0
-            row.createCell(0).apply { setCellValue(p.id.toDouble()); cellStyle = dataStyle }
-            row.createCell(1).apply { setCellValue(p.name); cellStyle = dataStyle }
-            row.createCell(2).apply { setCellValue(p.sku.ifEmpty { "N/A" }); cellStyle = dataStyle }
-            row.createCell(3).apply { setCellValue(p.category.ifEmpty { "General" }); cellStyle = dataStyle }
-            row.createCell(4).apply { setCellValue(p.cost); cellStyle = dataStyle }
-            row.createCell(5).apply { setCellValue(p.price); cellStyle = dataStyle }
-            row.createCell(6).apply { setCellValue(p.stock.toDouble()); cellStyle = dataStyle }
-            row.createCell(7).apply { setCellValue(p.minStock.toDouble()); cellStyle = dataStyle }
-            row.createCell(8).apply { setCellValue(profit); cellStyle = dataStyle }
-            row.createCell(9).apply { setCellValue(Math.round(margin * 100.0) / 100.0); cellStyle = dataStyle }
-            row.createCell(10).apply { setCellValue(p.description.ifEmpty { "" }); cellStyle = dataStyle }
+            row.createCell(0).setCellValue(p.id.toDouble())
+            row.createCell(1).setCellValue(p.name)
+            row.createCell(2).setCellValue(p.sku)
+            row.createCell(3).setCellValue(p.category)
+            row.createCell(4).setCellValue(p.cost)
+            row.createCell(5).setCellValue(p.price)
+            row.createCell(6).setCellValue(p.stock.toDouble())
+            row.createCell(7).setCellValue(p.minStock.toDouble())
+            row.createCell(8).setCellValue(profit)
+            row.createCell(9).setCellValue(Math.round(margin * 100.0) / 100.0)
         }
         
-        for (i in 0..10) { sheet.autoSizeColumn(i) }
-        sheet.createFreezePane(0, 1)
+        for (i in 0..9) sheet.autoSizeColumn(i)
         
-        var outputStream: OutputStream? = null
-        try {
-            outputStream = context.contentResolver.openOutputStream(uri)
-            if (outputStream != null) {
-                workbook.write(outputStream)
-                outputStream.flush()
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "✅ Exportado: ${products.size} productos a Excel", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "❌ No se pudo crear el archivo", Toast.LENGTH_SHORT).show()
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "❌ Error al guardar: ${e.message}", Toast.LENGTH_LONG).show()
-            }
-        } finally {
-            try { outputStream?.close() } catch (_: Exception) {}
-            try { workbook.close() } catch (_: Exception) {}
+        // Guardar
+        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+            workbook.write(outputStream)
+            outputStream.flush()
+        }
+        workbook.close()
+        
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, "✅ Exportado: ${products.size} productos", Toast.LENGTH_SHORT).show()
         }
     } catch (e: Exception) {
         e.printStackTrace()
