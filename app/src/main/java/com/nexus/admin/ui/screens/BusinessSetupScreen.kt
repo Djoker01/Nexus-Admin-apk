@@ -3,25 +3,33 @@ package com.nexus.admin.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.util.Log
+import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nexus.admin.data.AppDatabase
 import com.nexus.admin.data.entity.Business
 import com.nexus.admin.data.entity.User
 import com.nexus.admin.ui.components.FloatingBarcodeScanner
+import com.nexus.admin.utils.QrCodeGenerator
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,11 +102,21 @@ fun BusinessSetupScreen(
         }
     }
 
-    // ========== CREAR NEGOCIO ==========
+    // ========== CREAR NEGOCIO (CON QR) ==========
     if (showCreateDialog) {
         var name by remember { mutableStateOf("") }
         var ownerName by remember { mutableStateOf("") }
         val code = remember { "NX-${UUID.randomUUID().toString().take(6).uppercase()}" }
+        var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+        // Generar QR
+        LaunchedEffect(code) {
+            withContext(Dispatchers.IO) {
+                try {
+                    qrBitmap = QrCodeGenerator.generateQrCode(code)
+                } catch (_: Exception) {}
+            }
+        }
 
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
@@ -108,16 +126,40 @@ fun BusinessSetupScreen(
                     OutlinedTextField(name, { name = it }, label = { Text("Nombre del negocio *") }, singleLine = true)
                     OutlinedTextField(ownerName, { ownerName = it }, label = { Text("Tu nombre *") }, singleLine = true)
                     
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Código del negocio:", fontWeight = FontWeight.Bold)
-                            Text(code, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            TextButton(onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("Código", code))
-                                Toast.makeText(context, "✅ Código copiado", Toast.LENGTH_SHORT).show()
-                            }) { Text("Copiar código") }
+                    HorizontalDivider()
+                    Text("Código QR del negocio:", fontWeight = FontWeight.Bold)
+                    Text("El trabajador debe escanear este QR", style = MaterialTheme.typography.bodySmall)
+                    
+                    // MOSTRAR QR
+                    Box(modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally), contentAlignment = Alignment.Center) {
+                        if (qrBitmap != null) {
+                            Image(
+                                bitmap = qrBitmap!!.asImageBitmap(),
+                                contentDescription = "QR del negocio",
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
+                            )
+                        } else {
+                            CircularProgressIndicator()
                         }
+                    }
+                    
+                    // Código en texto
+                    Text(
+                        code,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    // Botón copiar
+                    OutlinedButton(onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Código", code))
+                        Toast.makeText(context, "✅ Código copiado", Toast.LENGTH_SHORT).show()
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(18.dp))
+                        Text("Copiar código")
                     }
                 }
             },
