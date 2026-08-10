@@ -207,61 +207,63 @@ fun BusinessSetupScreen(
                 }
             },
             confirmButton = {
-    Button(onClick = {
-        if (joinCode.isBlank() || workerName.isBlank() || workerPin.length != 4) {
-            Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show()
-            return@Button
-        }
-        
-        isJoining = true
-        
-        // Ejecutar en hilo secundario
-        Thread {
-            try {
-                runBlocking {
-                    // Buscar el negocio localmente
-                    val existingBusiness = db.businessDao().getAllBusinesses()
-                        .first()
-                        .find { it.code.equals(joinCode, ignoreCase = true) }
-                    
-                    // Si no existe, crearlo con el código escaneado
-                    val business = existingBusiness ?: run {
-                        val newBusiness = Business(
-                            name = "Negocio ($joinCode)",  // Nombre temporal
-                            code = joinCode,
-                            ownerName = "Admin Remoto"
-                        )
-                        db.businessDao().insert(newBusiness)
-                        newBusiness
+                Button(onClick = {
+                    if (joinCode.isBlank() || workerName.isBlank() || workerPin.length != 4) {
+                        Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show()
+                        return@Button
                     }
                     
-                    // Crear usuario trabajador
-                    db.userDao().insert(
-                        User(name = workerName.trim(), pin = workerPin, role = "worker")
-                    )
+                    isJoining = true
                     
-                    // Volver al hilo principal
-                    Handler(Looper.getMainLooper()).post {
-                        showJoinDialog = false
-                        onBusinessSelected(business)
-                        Toast.makeText(
-                            context,
-                            "✅ Conectado a: ${business.name}",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
+                    Thread {
+                        try {
+                            runBlocking {
+                                // Buscar negocio localmente
+                                val existingBusiness = db.businessDao().getAllBusinesses()
+                                    .first()
+                                    .find { it.code.equals(joinCode, ignoreCase = true) }
+                                
+                                // Si no existe, crearlo con el código escaneado
+                                val business = existingBusiness ?: run {
+                                    val newBusiness = Business(
+                                        name = "Negocio ($joinCode)",
+                                        code = joinCode,
+                                        ownerName = "Admin Remoto"
+                                    )
+                                    db.businessDao().insert(newBusiness)
+                                    newBusiness
+                                }
+                                
+                                // Crear usuario trabajador
+                                db.userDao().insert(
+                                    User(name = workerName.trim(), pin = workerPin, role = "worker")
+                                )
+                                
+                                // Volver al hilo principal
+                                Handler(Looper.getMainLooper()).post {
+                                    showJoinDialog = false
+                                    onBusinessSelected(business)
+                                    Toast.makeText(
+                                        context,
+                                        "✅ Conectado a: ${business.name}",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Handler(Looper.getMainLooper()).post {
+                                isJoining = false
+                                Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }.start()
+                }, enabled = !isJoining, modifier = Modifier.fillMaxWidth()) {
+                    if (isJoining) Text("Buscando...") else Text("UNIRSE AL NEGOCIO", fontWeight = FontWeight.Bold)
                 }
-            } catch (e: Exception) {
-                Handler(Looper.getMainLooper()).post {
-                    isJoining = false
-                    Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }.start()
-    }, enabled = !isJoining, modifier = Modifier.fillMaxWidth()) {
-        if (isJoining) Text("Buscando...") else Text("UNIRSE AL NEGOCIO", fontWeight = FontWeight.Bold)
+            },
+            dismissButton = { TextButton(onClick = { if (!isJoining) showJoinDialog = false }, enabled = !isJoining) { Text("Cancelar") } }
+        )
     }
-}
 
     // ========== MOSTRAR QR DE NEGOCIO EXISTENTE ==========
     showQrDialog?.let { business ->
