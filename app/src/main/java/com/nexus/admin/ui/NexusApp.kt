@@ -46,6 +46,7 @@ fun NexusApp() {
     var showBusinessSetup by remember { mutableStateOf(true) }
     var showUserManagement by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
+    var showOnboarding by remember { mutableStateOf(false) }
 
     // ========== PANTALLA 1: LOGIN ==========
     if (currentUser == null) {
@@ -88,6 +89,19 @@ fun NexusApp() {
     var syncQrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var showSyncMenu by remember { mutableStateOf(false) }
 
+    // Mostrar tutorial automáticamente después de seleccionar negocio
+    LaunchedEffect(currentBusiness) {
+        if (currentBusiness != null) {
+            val prefs = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE)
+            val key = "onboarding_shown_${currentUser?.role ?: "unknown"}"
+            val hasSeenOnboarding = prefs.getBoolean(key, false)
+            if (!hasSeenOnboarding) {
+                showOnboarding = true
+                prefs.edit().putBoolean(key, true).apply()
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         try {
             db.notificationDao().getAllNotifications().collect {
@@ -120,6 +134,14 @@ fun NexusApp() {
             showHelp = true
             prefs.edit().putBoolean("has_seen_help", true).apply()
         }
+    }
+
+    // ========== TUTORIAL INTERACTIVO ==========
+    if (showOnboarding) {
+        OnboardingTutorial(
+            isAdmin = isAdmin,
+            onFinish = { showOnboarding = false }
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -168,7 +190,7 @@ fun NexusApp() {
                                                 val data = syncManager.exportSalesToQr(
                                                     currentUser!!.name,
                                                     currentBusiness!!.code,
-                                                    isAdmin = isAdmin  // ← PASAR isAdmin
+                                                    isAdmin = isAdmin
                                                 )
                                                 if (data.isNotEmpty()) {
                                                     syncQrBitmap = QrCodeGenerator.generateQrCode(data)
