@@ -167,7 +167,8 @@ fun NexusApp() {
                                             withContext(Dispatchers.IO) {
                                                 val data = syncManager.exportSalesToQr(
                                                     currentUser!!.name,
-                                                    currentBusiness!!.code
+                                                    currentBusiness!!.code,
+                                                    isAdmin = isAdmin  // ← PASAR isAdmin
                                                 )
                                                 if (data.isNotEmpty()) {
                                                     syncQrBitmap = QrCodeGenerator.generateQrCode(data)
@@ -273,7 +274,7 @@ fun NexusApp() {
                             val result = syncManager.importSalesFromQr(data)
                             if (result.success) {
                                 showSyncImportScanner = false
-                                Toast.makeText(context, "✅ ${result.salesImported} ventas de ${result.workerName}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "✅ ${result.salesImported} ventas, ${result.productsUpdated} productos actualizados de ${result.workerName}", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
                             Log.e("NexusApp", "Error import: ${e.message}", e)
