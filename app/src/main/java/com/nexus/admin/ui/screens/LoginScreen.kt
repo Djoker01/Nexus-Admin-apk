@@ -30,14 +30,64 @@ fun LoginScreen(
     var errorMessage by remember { mutableStateOf("") }
     var showCreateAdminDialog by remember { mutableStateOf(false) }
     var showChangePin by remember { mutableStateOf(false) }
+    var showRoleChoice by remember { mutableStateOf(false) }
 
+    // Verificar si hay usuarios
     LaunchedEffect(Unit) {
         try {
             val admin = runBlocking { db.userDao().getAdmin() }
-            if (admin == null) showCreateAdminDialog = true
-        } catch (e: Exception) {
-            showCreateAdminDialog = true
+            val allUsers = runBlocking {
+                var list = emptyList<User>()
+                db.userDao().getAllUsers().collect { list = it }
+                list
+            }
+            // Si no hay ningún usuario, mostrar elección de rol
+            if (allUsers.isEmpty()) {
+                showRoleChoice = true
+            } else if (admin == null && allUsers.isNotEmpty()) {
+                // Hay usuarios pero no admin (trabajadores) - permitir login normal
+            }
+        } catch (_: Exception) {
+            showRoleChoice = true
         }
+    }
+
+    // Diálogo de elección de rol (primera vez)
+    if (showRoleChoice) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Bienvenido a Nexus Admin") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Selecciona tu rol:")
+                    Button(
+                        onClick = {
+                            showRoleChoice = false
+                            showCreateAdminDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Filled.AdminPanelSettings, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Soy el Administrador")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            showRoleChoice = false
+                            // Ir directo a Unirse como Trabajador
+                            onFirstTimeSetup() // Esto lleva a BusinessSetupScreen con opción Unirse
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Filled.PersonAdd, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Soy Trabajador")
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = null
+        )
     }
 
     Column(
@@ -99,7 +149,7 @@ fun LoginScreen(
         TextButton(onClick = { showChangePin = true }) { Text("Cambiar mi PIN") }
     }
 
-    // Crear Admin
+    // Diálogo: Crear Admin
     if (showCreateAdminDialog) {
         var adminName by remember { mutableStateOf("") }
         var adminPin by remember { mutableStateOf("") }
@@ -107,10 +157,10 @@ fun LoginScreen(
 
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("Configuración Inicial") },
+            title = { Text("Crear Administrador") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Bienvenido. Crea tu cuenta de Administrador:")
+                    Text("Crea tu cuenta de Administrador:")
                     OutlinedTextField(adminName, { adminName = it }, label = { Text("Tu nombre *") }, singleLine = true)
                     OutlinedTextField(adminPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) adminPin = it }, label = { Text("PIN (4 dígitos) *") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
                     OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN *") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
@@ -136,7 +186,7 @@ fun LoginScreen(
         )
     }
 
-    // Cambiar PIN
+    // Diálogo: Cambiar PIN
     if (showChangePin) {
         var currentPin by remember { mutableStateOf("") }
         var newPin by remember { mutableStateOf("") }
