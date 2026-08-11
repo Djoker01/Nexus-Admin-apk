@@ -1,6 +1,7 @@
 package com.nexus.admin.ui.screens
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -26,6 +27,7 @@ data class TutorialStep(
     val description: String
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingTutorial(
