@@ -146,14 +146,8 @@ fun NexusApp() {
                             Icon(Icons.Filled.HelpOutline, "Ayuda")
                         }
 
-                        // BOTÓN SYNC CON MENÚ PARA TRABAJADOR
-                        IconButton(onClick = {
-                            if (isAdmin) {
-                                showSyncImportScanner = true
-                            } else {
-                                showSyncMenu = true
-                            }
-                        }) {
+                        // BOTÓN SYNC CON MENÚ PARA ADMIN Y TRABAJADOR
+                        IconButton(onClick = { showSyncMenu = true }) {
                             Icon(Icons.Filled.Sync, "Sincronizar")
                         }
 
@@ -161,8 +155,9 @@ fun NexusApp() {
                             expanded = showSyncMenu,
                             onDismissRequest = { showSyncMenu = false }
                         ) {
+                            // Opción Exportar (generar QR)
                             DropdownMenuItem(
-                                text = { Text("📤 Exportar mis ventas") },
+                                text = { Text(if (isAdmin) "📤 Exportar datos (para trabajador)" else "📤 Exportar mis ventas") },
                                 onClick = {
                                     showSyncMenu = false
                                     scope.launch {
@@ -170,26 +165,29 @@ fun NexusApp() {
                                             showSyncExportQr = false
                                             syncQrBitmap = null
                                             withContext(Dispatchers.IO) {
-                                                val data = syncManager.exportSalesToQr(currentUser!!.name, currentBusiness!!.code)
+                                                val data = syncManager.exportSalesToQr(
+                                                    currentUser!!.name,
+                                                    currentBusiness!!.code
+                                                )
                                                 if (data.isNotEmpty()) {
                                                     syncQrBitmap = QrCodeGenerator.generateQrCode(data)
                                                     withContext(Dispatchers.Main) { showSyncExportQr = true }
                                                 } else {
                                                     withContext(Dispatchers.Main) {
-                                                        Toast.makeText(context, "⚠️ No hay ventas para exportar", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "⚠️ No hay datos para exportar", Toast.LENGTH_SHORT).show()
                                                     }
                                                 }
                                             }
                                         } catch (e: Exception) {
-                                            Log.e("NexusApp", "Error export: ${e.message}", e)
                                             Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
                                 leadingIcon = { Icon(Icons.Filled.Upload, null) }
                             )
+                            // Opción Importar (escanear QR)
                             DropdownMenuItem(
-                                text = { Text("📥 Actualizar desde Admin") },
+                                text = { Text(if (isAdmin) "📥 Importar datos (de trabajador)" else "📥 Actualizar desde Admin") },
                                 onClick = {
                                     showSyncMenu = false
                                     showSyncImportScanner = true
@@ -255,10 +253,10 @@ fun NexusApp() {
         if (showSyncExportQr && syncQrBitmap != null) {
             AlertDialog(
                 onDismissRequest = { showSyncExportQr = false },
-                title = { Text("📤 Exportar Ventas") },
+                title = { Text("📤 Exportar Datos") },
                 text = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Muestra este QR al administrador")
+                        Text("Muestra este QR al otro dispositivo")
                         Spacer(Modifier.height(16.dp))
                         Image(bitmap = syncQrBitmap!!.asImageBitmap(), contentDescription = "QR Sync", modifier = Modifier.size(280.dp))
                     }
