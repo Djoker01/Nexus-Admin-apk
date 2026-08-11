@@ -22,14 +22,21 @@ class OfflineSyncManager(
     private val gson = GsonBuilder().create()
 
     /**
-     * EXPORTAR: Generar string comprimido con ventas, caja, stock y cuentas por cobrar
+     * EXPORTAR: Generar string comprimido con ventas, caja, stock, cuentas por cobrar
+     * @param workerName Nombre del usuario que exporta
+     * @param businessCode Código del negocio
+     * @param isAdmin Si es admin, el stock se exporta para sobrescribir en el destino
      */
-    suspend fun exportSalesToQr(workerName: String, businessCode: String): String = withContext(Dispatchers.IO) {
+    suspend fun exportSalesToQr(
+        workerName: String,
+        businessCode: String,
+        isAdmin: Boolean = false
+    ): String = withContext(Dispatchers.IO) {
         try {
             val todayStart = Utils.getTodayStart()
             val todayEnd = Utils.getTodayEnd()
             
-            // Ventas del día
+            // Ventas del día (no devueltas)
             val todaySales = db.saleDao().getAllSales().first()
                 .filter { it.date in todayStart..todayEnd && !it.isReturned }
             
@@ -37,7 +44,7 @@ class OfflineSyncManager(
             val todayCash = db.cashMovementDao().getAllMovements().first()
                 .filter { it.date in todayStart..todayEnd }
             
-            // Stock actual
+            // Stock actual completo
             val products = db.productDao().getAllProducts().first()
             
             // Cuentas por cobrar activas (pendientes y parciales)
@@ -88,7 +95,8 @@ class OfflineSyncManager(
                         status = r.status,
                         date = r.date
                     )
-                }
+                },
+                isAdminExport = isAdmin
             )
 
             val json = gson.toJson(syncPackage)
@@ -113,7 +121,7 @@ class OfflineSyncManager(
     }
 
     /**
-     * IMPORTAR: Recibir string comprimido y actualizar BD local
+     * IMPORTAR: Recibir string comprimido (desde QR) y actualizar BD local
      */
     suspend fun importSalesFromQr(compressedData: String): ImportResult = withContext(Dispatchers.IO) {
         try {
@@ -125,7 +133,8 @@ class OfflineSyncManager(
             var updatedProducts = 0
             var importedReceivables = 0
 
-            // 1. Importar ventas
+            // 1. Importar ventas (evitar duplicados)
+            val existingSales = db.saleDao().getAllSales().first()
             syncPackage.sales.forEach { s ->
                 val saleProducts = s.products.split(";").mapNotNull { sp ->
                     val parts = sp.split(",")
@@ -140,8 +149,6 @@ class OfflineSyncManager(
                     } else null
                 }
                 if (saleProducts.isNotEmpty()) {
-                    // Verificar si ya existe esta venta (evitar duplicados)
-                    val existingSales = db.saleDao().getAllSales().first()
                     val isDuplicate = existingSales.any { existing ->
                         existing.client == s.client &&
                         existing.total == s.total &&
@@ -165,9 +172,9 @@ class OfflineSyncManager(
                 }
             }
 
-            // 2. Importar movimientos de caja
+            // 2. Importar movimientos de caja (evitar duplicados)
+            val existingCash = db.cashMovementDao().getAllMovements().first()
             syncPackage.cashMovements.forEach { m ->
-                val existingCash = db.cashMovementDao().getAllMovements().first()
                 val isDuplicate = existingCash.any { existing ->
                     existing.amount == m.amount &&
                     existing.description == m.description &&
@@ -187,19 +194,23 @@ class OfflineSyncManager(
                 }
             }
 
-            // 3. Actualizar stock (solo si el stock remoto es menor = más reciente)
+            // 3. Actualizar stock
             syncPackage.products.forEach { p ->
                 val existing = db.productDao().getAllProducts().first()
                     .find { it.sku == p.sku }
-                if (existing != null && p.stock < existing.stock) {
-                    db.productDao().update(existing.copy(stock = p.stock))
-                    updatedProducts++
+                if (existing != null) {
+                    // ✅ Si es admin, actualizar SIEMPRE (sobrescribir stock)
+                    // ✅ Si es trabajador, solo si el stock es menor (ventas)
+                    if (syncPackage.isAdminExport || p.stock < existing.stock) {
+                        db.productDao().update(existing.copy(stock = p.stock))
+                        updatedProducts++
+                    }
                 }
             }
 
-            // 4. Importar cuentas por cobrar (NUEVO)
+            // 4. Importar cuentas por cobrar (evitar duplicados)
+            val existingReceivables = db.receivableDao().getAllReceivables().first()
             syncPackage.receivables.forEach { r ->
-                val existingReceivables = db.receivableDao().getAllReceivables().first()
                 val isDuplicate = existingReceivables.any { existing ->
                     existing.clientName == r.clientName &&
                     existing.concept == r.concept &&
@@ -233,7 +244,7 @@ class OfflineSyncManager(
             withContext(Dispatchers.Main) {
                 Toast.makeText(
                     context,
-                    "✅ ${result.salesImported} ventas, ${result.receivablesImported} ctas por cobrar de ${result.workerName}",
+                    "✅ ${result.salesImported} ventas, ${result.receivablesImported} ctas, ${result.productsUpdated} productos",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -248,9 +259,6 @@ class OfflineSyncManager(
         }
     }
 
-    /**
-     * Comprimir string para que quepa en QR
-     */
     private fun compress(data: String): String {
         val deflater = Deflater(Deflater.BEST_COMPRESSION)
         deflater.setInput(data.toByteArray(Charsets.UTF_8))
@@ -264,9 +272,6 @@ class OfflineSyncManager(
         return Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
     }
 
-    /**
-     * Descomprimir string desde QR
-     */
     private fun decompress(data: String): String {
         val inflater = Inflater()
         inflater.setInput(Base64.decode(data, Base64.NO_WRAP))
