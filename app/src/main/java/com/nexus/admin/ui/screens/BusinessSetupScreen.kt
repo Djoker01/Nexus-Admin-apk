@@ -4,8 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
-import android.os.Handler
-import android.os.Looper
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -93,9 +91,11 @@ fun BusinessSetupScreen(
                                 Text(business.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
                                 Text("Código: ${business.code}", style = MaterialTheme.typography.bodyMedium)
                             }
+                            // BOTÓN PARA MOSTRAR QR DEL NEGOCIO (CONEXIÓN)
                             IconButton(onClick = { showQrDialog = business }) {
                                 Icon(Icons.Filled.QrCode, "Mostrar QR", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                             }
+                            // BOTÓN PARA ENTRAR
                             IconButton(onClick = { onBusinessSelected(business) }) {
                                 Icon(Icons.Filled.ArrowForward, "Entrar", tint = MaterialTheme.colorScheme.primary)
                             }
@@ -168,13 +168,12 @@ fun BusinessSetupScreen(
         )
     }
 
-    // ========== UNIRSE COMO TRABAJADOR ==========
+    // ========== UNIRSE COMO TRABAJADOR (runBlocking directo) ==========
     if (showJoinDialog) {
         var joinCode by remember { mutableStateOf("") }
         var workerName by remember { mutableStateOf("") }
         var workerPin by remember { mutableStateOf("") }
         var showScanner by remember { mutableStateOf(false) }
-        var isJoining by remember { mutableStateOf(false) }
 
         if (showScanner) {
             FloatingBarcodeScanner(
@@ -187,23 +186,19 @@ fun BusinessSetupScreen(
         }
 
         AlertDialog(
-            onDismissRequest = { if (!isJoining) showJoinDialog = false },
+            onDismissRequest = { showJoinDialog = false },
             title = { Text("Unirse como Trabajador", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(joinCode, { joinCode = it.trim().uppercase() }, label = { Text("Código del negocio *") }, singleLine = true, enabled = !isJoining)
-                    Button(onClick = { showScanner = true }, modifier = Modifier.fillMaxWidth(), enabled = !isJoining) {
+                    OutlinedTextField(joinCode, { joinCode = it.trim().uppercase() }, label = { Text("Código del negocio *") }, singleLine = true)
+                    Button(onClick = { showScanner = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.QrCodeScanner, null, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("ESCANEAR QR")
                     }
                     HorizontalDivider()
-                    OutlinedTextField(workerName, { workerName = it }, label = { Text("Tu nombre *") }, singleLine = true, enabled = !isJoining)
-                    OutlinedTextField(workerPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) workerPin = it }, label = { Text("PIN de 4 dígitos *") }, singleLine = true, enabled = !isJoining)
-                    if (isJoining) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        Text("Buscando negocio...", style = MaterialTheme.typography.bodySmall)
-                    }
+                    OutlinedTextField(workerName, { workerName = it }, label = { Text("Tu nombre *") }, singleLine = true)
+                    OutlinedTextField(workerPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) workerPin = it }, label = { Text("PIN de 4 dígitos *") }, singleLine = true)
                 }
             },
             confirmButton = {
@@ -212,56 +207,33 @@ fun BusinessSetupScreen(
                         Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    
-                    isJoining = true
-                    
-                    Thread {
-                        try {
-                            runBlocking {
-                                // Buscar negocio localmente
-                                val existingBusiness = db.businessDao().getAllBusinesses()
-                                    .first()
-                                    .find { it.code.equals(joinCode, ignoreCase = true) }
-                                
-                                // Si no existe, crearlo con el código escaneado
-                                val business = existingBusiness ?: run {
-                                    val newBusiness = Business(
-                                        name = "Negocio ($joinCode)",
-                                        code = joinCode,
-                                        ownerName = "Admin Remoto"
-                                    )
-                                    db.businessDao().insert(newBusiness)
-                                    newBusiness
-                                }
-                                
-                                // Crear usuario trabajador
-                                db.userDao().insert(
-                                    User(name = workerName.trim(), pin = workerPin, role = "worker")
-                                )
-                                
-                                // Volver al hilo principal
-                                Handler(Looper.getMainLooper()).post {
-                                    showJoinDialog = false
-                                    onBusinessSelected(business)
-                                    Toast.makeText(
-                                        context,
-                                        "✅ Conectado a: ${business.name}",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Handler(Looper.getMainLooper()).post {
-                                isJoining = false
-                                Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    try {
+                        val business = runBlocking {
+                            // Buscar o crear el negocio
+                            val existing = db.businessDao().getAllBusinesses().first()
+                                .find { it.code.equals(joinCode, ignoreCase = true) }
+                            
+                            if (existing != null) existing
+                            else {
+                                val newB = Business(name = "Negocio ($joinCode)", code = joinCode, ownerName = "Admin Remoto")
+                                db.businessDao().insert(newB)
+                                newB
                             }
                         }
-                    }.start()
-                }, enabled = !isJoining, modifier = Modifier.fillMaxWidth()) {
-                    if (isJoining) Text("Buscando...") else Text("UNIRSE AL NEGOCIO", fontWeight = FontWeight.Bold)
-                }
+                        
+                        runBlocking {
+                            db.userDao().insert(User(name = workerName.trim(), pin = workerPin, role = "worker"))
+                        }
+                        
+                        showJoinDialog = false
+                        onBusinessSelected(business)  // <-- Navega inmediatamente
+                        Toast.makeText(context, "✅ Conectado a: ${business.name}", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }) { Text("UNIRSE AL NEGOCIO", fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { if (!isJoining) showJoinDialog = false }, enabled = !isJoining) { Text("Cancelar") } }
+            dismissButton = { TextButton(onClick = { showJoinDialog = false }) { Text("Cancelar") } }
         )
     }
 
