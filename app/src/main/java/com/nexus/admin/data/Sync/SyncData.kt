@@ -7,7 +7,8 @@ data class SyncPackage(
     val sales: List<SyncSaleQr> = emptyList(),
     val cashMovements: List<SyncCashMovementQr> = emptyList(),
     val products: List<SyncProductQr> = emptyList(),
-    val receivables: List<SyncReceivableQr> = emptyList()
+    val receivables: List<SyncReceivableQr> = emptyList(),
+    val isAdminExport: Boolean = false
 )
 
 data class SyncSaleQr(
