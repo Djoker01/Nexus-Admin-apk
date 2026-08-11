@@ -23,9 +23,6 @@ class OfflineSyncManager(
 
     /**
      * EXPORTAR: Generar string comprimido con ventas, caja, stock, cuentas por cobrar
-     * @param workerName Nombre del usuario que exporta
-     * @param businessCode Código del negocio
-     * @param isAdmin Si es admin, el stock se exporta para sobrescribir en el destino
      */
     suspend fun exportSalesToQr(
         workerName: String,
@@ -36,18 +33,15 @@ class OfflineSyncManager(
             val todayStart = Utils.getTodayStart()
             val todayEnd = Utils.getTodayEnd()
             
-            // Ventas del día (no devueltas)
             val todaySales = db.saleDao().getAllSales().first()
                 .filter { it.date in todayStart..todayEnd && !it.isReturned }
             
-            // Movimientos de caja del día
             val todayCash = db.cashMovementDao().getAllMovements().first()
                 .filter { it.date in todayStart..todayEnd }
             
-            // Stock actual completo
+            // Stock completo (todos los productos)
             val products = db.productDao().getAllProducts().first()
             
-            // Cuentas por cobrar activas (pendientes y parciales)
             val activeReceivables = db.receivableDao().getAllReceivables().first()
                 .filter { it.status != "paid" }
 
@@ -105,7 +99,7 @@ class OfflineSyncManager(
             withContext(Dispatchers.Main) {
                 Toast.makeText(
                     context,
-                    "✅ ${todaySales.size} ventas, ${activeReceivables.size} ctas por cobrar exportadas",
+                    "✅ ${todaySales.size} ventas, ${products.size} productos exportados",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -121,7 +115,7 @@ class OfflineSyncManager(
     }
 
     /**
-     * IMPORTAR: Recibir string comprimido (desde QR) y actualizar BD local
+     * IMPORTAR: Recibir string comprimido y actualizar BD local
      */
     suspend fun importSalesFromQr(compressedData: String): ImportResult = withContext(Dispatchers.IO) {
         try {
@@ -131,6 +125,7 @@ class OfflineSyncManager(
             var importedSales = 0
             var importedCash = 0
             var updatedProducts = 0
+            var newProducts = 0
             var importedReceivables = 0
 
             // 1. Importar ventas (evitar duplicados)
@@ -139,95 +134,79 @@ class OfflineSyncManager(
                 val saleProducts = s.products.split(";").mapNotNull { sp ->
                     val parts = sp.split(",")
                     if (parts.size >= 4) {
-                        SaleProduct(
-                            productId = 0,
-                            name = parts[0],
-                            quantity = parts[1].toIntOrNull() ?: 1,
-                            price = parts[2].toDoubleOrNull() ?: 0.0,
-                            cost = parts[3].toDoubleOrNull() ?: 0.0
-                        )
+                        SaleProduct(0, parts[0], parts[1].toIntOrNull() ?: 1, parts[2].toDoubleOrNull() ?: 0.0, parts[3].toDoubleOrNull() ?: 0.0)
                     } else null
                 }
                 if (saleProducts.isNotEmpty()) {
-                    val isDuplicate = existingSales.any { existing ->
-                        existing.client == s.client &&
-                        existing.total == s.total &&
-                        existing.date == s.date
-                    }
-                    
+                    val isDuplicate = existingSales.any { it.client == s.client && it.total == s.total && it.date == s.date }
                     if (!isDuplicate) {
-                        db.saleDao().insert(
-                            Sale(
-                                client = s.client,
-                                products = saleProducts,
-                                total = s.total,
-                                cost = s.cost,
-                                paymentMethod = s.paymentMethod,
-                                date = s.date,
-                                isReceivable = s.isReceivable
-                            )
-                        )
+                        db.saleDao().insert(Sale(client = s.client, products = saleProducts, total = s.total, cost = s.cost, paymentMethod = s.paymentMethod, date = s.date, isReceivable = s.isReceivable))
                         importedSales++
                     }
                 }
             }
 
-            // 2. Importar movimientos de caja (evitar duplicados)
+            // 2. Importar movimientos de caja
             val existingCash = db.cashMovementDao().getAllMovements().first()
             syncPackage.cashMovements.forEach { m ->
-                val isDuplicate = existingCash.any { existing ->
-                    existing.amount == m.amount &&
-                    existing.description == m.description &&
-                    existing.date == m.date
-                }
-                
+                val isDuplicate = existingCash.any { it.amount == m.amount && it.description == m.description && it.date == m.date }
                 if (!isDuplicate) {
-                    db.cashMovementDao().insert(
-                        CashMovement(
-                            type = m.type,
-                            amount = m.amount,
-                            description = "${m.description} (Sync: ${syncPackage.workerName})",
-                            date = m.date
-                        )
-                    )
+                    db.cashMovementDao().insert(CashMovement(type = m.type, amount = m.amount, description = "${m.description} (Sync: ${syncPackage.workerName})", date = m.date))
                     importedCash++
                 }
             }
 
-            // 3. Actualizar stock
-            syncPackage.products.forEach { p ->
-                val existing = db.productDao().getAllProducts().first()
-                    .find { it.sku == p.sku }
+            // 3. Actualizar/Crear productos del inventario
+            val existingProducts = db.productDao().getAllProducts().first()
+            
+            syncPackage.products.forEach { syncProduct ->
+                val existing = existingProducts.find { it.sku == syncProduct.sku }
+                
                 if (existing != null) {
-                    // ✅ Si es admin, actualizar SIEMPRE (sobrescribir stock)
-                    // ✅ Si es trabajador, solo si el stock es menor (ventas)
-                    if (syncPackage.isAdminExport || p.stock < existing.stock) {
-                        db.productDao().update(existing.copy(stock = p.stock))
+                    // Producto existe: actualizar según quien exportó
+                    if (syncPackage.isAdminExport) {
+                        // ✅ ADMIN: actualizar stock, precio, costo, stock mínimo
+                        db.productDao().update(
+                            existing.copy(
+                                stock = syncProduct.stock,
+                                price = syncProduct.price,
+                                cost = syncProduct.cost,
+                                minStock = syncProduct.minStock,
+                                name = syncProduct.name  // por si cambió el nombre
+                            )
+                        )
                         updatedProducts++
+                    } else {
+                        // Trabajador: solo actualizar stock si es menor (ventas)
+                        if (syncProduct.stock < existing.stock) {
+                            db.productDao().update(existing.copy(stock = syncProduct.stock))
+                            updatedProducts++
+                        }
+                    }
+                } else {
+                    // Producto NO existe: crearlo si es exportación del admin
+                    if (syncPackage.isAdminExport) {
+                        db.productDao().insert(
+                            Product(
+                                name = syncProduct.name,
+                                sku = syncProduct.sku,
+                                price = syncProduct.price,
+                                cost = syncProduct.cost,
+                                stock = syncProduct.stock,
+                                minStock = syncProduct.minStock
+                            )
+                        )
+                        newProducts++
                     }
                 }
             }
 
-            // 4. Importar cuentas por cobrar (evitar duplicados)
+            // 4. Importar cuentas por cobrar
             val existingReceivables = db.receivableDao().getAllReceivables().first()
             syncPackage.receivables.forEach { r ->
-                val isDuplicate = existingReceivables.any { existing ->
-                    existing.clientName == r.clientName &&
-                    existing.concept == r.concept &&
-                    existing.totalAmount == r.totalAmount
-                }
-                
+                val isDuplicate = existingReceivables.any { it.clientName == r.clientName && it.concept == r.concept && it.totalAmount == r.totalAmount }
                 if (!isDuplicate) {
-                    db.receivableDao().insert(
-                        Receivable(
-                            clientName = r.clientName,
-                            concept = r.concept,
-                            totalAmount = r.totalAmount,
-                            balance = r.balance,
-                            status = r.status,
-                            date = r.date
-                        )
-                    )
+                    db.receivableDao().insert(Receivable(clientName = r.clientName, concept = r.concept, totalAmount = r.totalAmount, balance = r.balance, status = r.status, date = r.date))
                     importedReceivables++
                 }
             }
@@ -236,17 +215,19 @@ class OfflineSyncManager(
                 success = true,
                 salesImported = importedSales,
                 cashImported = importedCash,
-                productsUpdated = updatedProducts,
+                productsUpdated = updatedProducts + newProducts,
                 receivablesImported = importedReceivables,
                 workerName = syncPackage.workerName
             )
 
             withContext(Dispatchers.Main) {
-                Toast.makeText(
-                    context,
-                    "✅ ${result.salesImported} ventas, ${result.receivablesImported} ctas, ${result.productsUpdated} productos",
-                    Toast.LENGTH_SHORT
-                ).show()
+                val msg = buildString {
+                    append("✅ ${result.salesImported} ventas")
+                    if (updatedProducts > 0) append(", ${updatedProducts} productos actualizados")
+                    if (newProducts > 0) append(", ${newProducts} productos nuevos")
+                    if (importedReceivables > 0) append(", ${importedReceivables} ctas por cobrar")
+                }
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
             }
 
             result
