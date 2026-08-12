@@ -31,6 +31,7 @@ import com.nexus.admin.ui.theme.*
 import com.nexus.admin.utils.QrCodeGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,9 +50,17 @@ fun NexusApp() {
     var showHelp by remember { mutableStateOf(false) }
     var showOnboarding by remember { mutableStateOf(false) }
 
+    // Controlar splash con delay (2.5 segundos)
+    LaunchedEffect(Unit) {
+        if (showSplash) {
+            kotlinx.coroutines.delay(2500)
+            showSplash = false
+        }
+    }
+
     // ========== PANTALLA 0: SPLASH SCREEN ==========
     if (showSplash) {
-        SplashScreen(onSplashFinished = { showSplash = false })
+        SplashScreen()
         return
     }
 
@@ -96,6 +105,7 @@ fun NexusApp() {
     var syncQrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var showSyncMenu by remember { mutableStateOf(false) }
 
+    // Mostrar tutorial automáticamente
     LaunchedEffect(currentBusiness) {
         if (currentBusiness != null) {
             val prefs = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE)
@@ -133,6 +143,7 @@ fun NexusApp() {
         showNotifications = false
     }
 
+    // Tutorial
     if (showOnboarding) {
         OnboardingTutorial(
             isAdmin = isAdmin,
