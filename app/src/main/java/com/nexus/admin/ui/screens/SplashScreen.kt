@@ -16,46 +16,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexus.admin.R
 import com.nexus.admin.ui.theme.White
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
-fun SplashScreen(onSplashFinished: () -> Unit) {
+fun SplashScreen() {
     val scale = remember { Animatable(0.3f) }
     val alpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        // Animar entrada con corrutinas
-        val job1 = launch {
-            scale.animateTo(
-                targetValue = 1f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
+        // Animar entrada
+        scale.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow
             )
-        }
-        val job2 = launch {
-            alpha.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 800)
-            )
-        }
-
-        // Esperar a que terminen las animaciones de entrada
-        job1.join()
-        job2.join()
-
-        // Esperar 2 segundos
-        delay(2000)
-
-        // Animar salida
-        alpha.animateTo(
-            targetValue = 0f,
-            animationSpec = tween(durationMillis = 400)
         )
-
-        onSplashFinished()
+        alpha.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 800)
+        )
     }
 
     Box(
@@ -87,9 +66,7 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = White,
-                modifier = Modifier.graphicsLayer {
-                    this.alpha = alpha.value
-                }
+                modifier = Modifier.graphicsLayer { this.alpha = alpha.value }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -98,9 +75,7 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
                 text = "Sistema de Administración Empresarial",
                 fontSize = 14.sp,
                 color = White.copy(alpha = 0.7f),
-                modifier = Modifier.graphicsLayer {
-                    this.alpha = alpha.value
-                }
+                modifier = Modifier.graphicsLayer { this.alpha = alpha.value }
             )
 
             Spacer(modifier = Modifier.height(48.dp))
@@ -120,9 +95,7 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
                 text = "Cargando...",
                 fontSize = 12.sp,
                 color = White.copy(alpha = loadingAlpha),
-                modifier = Modifier.graphicsLayer {
-                    this.alpha = alpha.value
-                }
+                modifier = Modifier.graphicsLayer { this.alpha = alpha.value }
             )
         }
     }
