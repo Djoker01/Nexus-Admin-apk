@@ -27,8 +27,7 @@ data class TutorialStep(
     val description: String
 )
 
-@OptIn(ExperimentalFoundationApi::class)
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingTutorial(
     isAdmin: Boolean,
