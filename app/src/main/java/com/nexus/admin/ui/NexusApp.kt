@@ -127,14 +127,6 @@ fun NexusApp() {
         showNotifications = false
     }
 
-    LaunchedEffect(currentUser) {
-        val prefs = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE)
-        val hasSeenHelp = prefs.getBoolean("has_seen_help", false)
-        if (!hasSeenHelp) {
-            showHelp = true
-            prefs.edit().putBoolean("has_seen_help", true).apply()
-        }
-    }
 
     // ========== TUTORIAL INTERACTIVO ==========
     if (showOnboarding) {
