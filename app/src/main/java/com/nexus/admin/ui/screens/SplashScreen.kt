@@ -9,25 +9,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexus.admin.R
-import com.nexus.admin.ui.theme.Green
 import com.nexus.admin.ui.theme.White
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun SplashScreen(onSplashFinished: () -> Unit) {
-    // Animación de escala (aparece suavemente)
     val scale = remember { Animatable(0.3f) }
-    // Animación de opacidad (fade in)
     val alpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        // Animar entrada
-        launch {
+        // Animar entrada con corrutinas
+        val job1 = launch {
             scale.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(
@@ -36,52 +35,53 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
                 )
             )
         }
-        launch {
+        val job2 = launch {
             alpha.animateTo(
                 targetValue = 1f,
                 animationSpec = tween(durationMillis = 800)
             )
         }
 
-        // Esperar 2 segundos antes de pasar al login
+        // Esperar a que terminen las animaciones de entrada
+        job1.join()
+        job2.join()
+
+        // Esperar 2 segundos
         delay(2000)
 
-        // Animar salida (fade out)
+        // Animar salida
         alpha.animateTo(
             targetValue = 0f,
             animationSpec = tween(durationMillis = 400)
         )
 
-        // Notificar que el splash terminó
         onSplashFinished()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F172A)), // Azul marino oscuro
+            .background(Color(0xFF0F172A)),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Logo (usando el drawable del icono)
             Image(
                 painter = painterResource(id = R.drawable.ic_launcher_foreground),
                 contentDescription = "Nexus Admin Logo",
                 modifier = Modifier
                     .size(120.dp)
                     .graphicsLayer {
-                        this.scaleX = scale.value
-                        this.scaleY = scale.value
+                        scaleX = scale.value
+                        scaleY = scale.value
                         this.alpha = alpha.value
                     }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Título de la app
             Text(
                 text = "Nexus Admin",
                 fontSize = 28.sp,
@@ -94,7 +94,6 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Subtítulo
             Text(
                 text = "Sistema de Administración Empresarial",
                 fontSize = 14.sp,
@@ -106,7 +105,6 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // Indicador de carga animado
             val infiniteTransition = rememberInfiniteTransition(label = "loading")
             val loadingAlpha by infiniteTransition.animateFloat(
                 initialValue = 0.3f,
