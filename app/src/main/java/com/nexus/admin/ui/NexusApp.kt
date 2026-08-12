@@ -41,12 +41,19 @@ fun NexusApp() {
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
 
+    var showSplash by remember { mutableStateOf(true) }
     var currentUser by remember { mutableStateOf<User?>(null) }
     var currentBusiness by remember { mutableStateOf<Business?>(null) }
     var showBusinessSetup by remember { mutableStateOf(true) }
     var showUserManagement by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     var showOnboarding by remember { mutableStateOf(false) }
+
+    // ========== PANTALLA 0: SPLASH SCREEN ==========
+    if (showSplash) {
+        SplashScreen(onSplashFinished = { showSplash = false })
+        return
+    }
 
     // ========== PANTALLA 1: LOGIN ==========
     if (currentUser == null) {
@@ -89,7 +96,6 @@ fun NexusApp() {
     var syncQrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var showSyncMenu by remember { mutableStateOf(false) }
 
-    // Mostrar tutorial automáticamente después de seleccionar negocio
     LaunchedEffect(currentBusiness) {
         if (currentBusiness != null) {
             val prefs = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE)
@@ -127,8 +133,6 @@ fun NexusApp() {
         showNotifications = false
     }
 
-
-    // ========== TUTORIAL INTERACTIVO ==========
     if (showOnboarding) {
         OnboardingTutorial(
             isAdmin = isAdmin,
@@ -160,7 +164,6 @@ fun NexusApp() {
                             Icon(Icons.Filled.HelpOutline, "Ayuda")
                         }
 
-                        // BOTÓN SYNC CON MENÚ PARA ADMIN Y TRABAJADOR
                         IconButton(onClick = { showSyncMenu = true }) {
                             Icon(Icons.Filled.Sync, "Sincronizar")
                         }
@@ -169,7 +172,6 @@ fun NexusApp() {
                             expanded = showSyncMenu,
                             onDismissRequest = { showSyncMenu = false }
                         ) {
-                            // Opción Exportar (generar QR)
                             DropdownMenuItem(
                                 text = { Text(if (isAdmin) "📤 Exportar datos (para trabajador)" else "📤 Exportar mis ventas") },
                                 onClick = {
@@ -200,7 +202,6 @@ fun NexusApp() {
                                 },
                                 leadingIcon = { Icon(Icons.Filled.Upload, null) }
                             )
-                            // Opción Importar (escanear QR)
                             DropdownMenuItem(
                                 text = { Text(if (isAdmin) "📥 Importar datos (de trabajador)" else "📥 Actualizar desde Admin") },
                                 onClick = {
@@ -299,6 +300,6 @@ fun NexusApp() {
             )
         }
 
-        if (showHelp) { HelpScreen(onDismiss = { showHelp = false }) }
+        if (showHelp) { HelpScreen(isAdmin = isAdmin, onDismiss = { showHelp = false }) }
     }
 }
