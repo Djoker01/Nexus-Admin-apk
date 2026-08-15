@@ -17,6 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nexus.admin.data.AppDatabase
 import com.nexus.admin.data.entity.User
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
 @Composable
@@ -32,20 +33,14 @@ fun LoginScreen(
     var showChangePin by remember { mutableStateOf(false) }
     var showRoleChoice by remember { mutableStateOf(false) }
 
-    // Verificar si hay usuarios
+    // CORREGIDO: Usar first() para obtener la lista sin bloquear
     LaunchedEffect(Unit) {
         try {
-            val admin = runBlocking { db.userDao().getAdmin() }
             val allUsers = runBlocking {
-                var list = emptyList<User>()
-                db.userDao().getAllUsers().collect { list = it }
-                list
+                db.userDao().getAllUsers().first()
             }
-            // Si no hay ningún usuario, mostrar elección de rol
             if (allUsers.isEmpty()) {
                 showRoleChoice = true
-            } else if (admin == null && allUsers.isNotEmpty()) {
-                // Hay usuarios pero no admin (trabajadores) - permitir login normal
             }
         } catch (_: Exception) {
             showRoleChoice = true
@@ -74,8 +69,7 @@ fun LoginScreen(
                     OutlinedButton(
                         onClick = {
                             showRoleChoice = false
-                            // Ir directo a Unirse como Trabajador
-                            onFirstTimeSetup() // Esto lleva a BusinessSetupScreen con opción Unirse
+                            onFirstTimeSetup()
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
