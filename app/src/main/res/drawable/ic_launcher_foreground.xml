@@ -5,24 +5,43 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Símbolo N abstracta geométrica -->
+    <!-- N estilizada con bloques geométricos -->
+    <!-- Barra vertical izquierda -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M36,68V40l13,16 13,-16v28h-5V51l-8,10 -8,-10v17z"/>
+        android:pathData="M36,36h6v36h-6z"/>
 
-    <!-- Barra horizontal superior (control) -->
+    <!-- Barra vertical derecha -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,36h6v36h-6z"/>
+
+    <!-- Diagonal de la N -->
     <path
         android:fillColor="#3B82F6"
-        android:pathData="M32,36h44v3H32z"/>
+        android:pathData="M42,36l18,24 6,0L48,36z"/>
 
-    <!-- Indicador de organización (puntos) -->
-    <path
-        android:fillColor="#3B82F6"
-        android:pathData="M48,72m-2.5,0a2.5,2.5 0,1 1,5 0a2.5,2.5 0,1 1,-5 0"/>
+    <!-- Bloques de control superiores -->
     <path
         android:fillColor="#60A5FA"
-        android:pathData="M56,72m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0"/>
+        android:pathData="M42,28h8v4h-8z"/>
+
     <path
         android:fillColor="#93C5FD"
-        android:pathData="M63,72m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0"/>
+        android:pathData="M54,28h8v4h-8z"/>
+
+    <!-- Indicador inferior (crecimiento) -->
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M48,76h4v4h-4z"/>
+
+    <path
+        android:fillColor="#60A5FA"
+        android:pathData="M56,76h4v4h-4z"/>
+
+    <!-- Barra de progreso -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.5"
+        android:pathData="M38,32h32v2h-32z"/>
 </vector>
