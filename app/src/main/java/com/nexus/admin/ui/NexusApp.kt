@@ -31,6 +31,7 @@ import com.nexus.admin.ui.theme.*
 import com.nexus.admin.utils.QrCodeGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,12 +42,27 @@ fun NexusApp() {
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
 
+    var showSplash by remember { mutableStateOf(true) }
     var currentUser by remember { mutableStateOf<User?>(null) }
     var currentBusiness by remember { mutableStateOf<Business?>(null) }
     var showBusinessSetup by remember { mutableStateOf(true) }
     var showUserManagement by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     var showOnboarding by remember { mutableStateOf(false) }
+
+    // Controlar splash con delay (2.5 segundos)
+    LaunchedEffect(Unit) {
+        if (showSplash) {
+            kotlinx.coroutines.delay(2500)
+            showSplash = false
+        }
+    }
+
+    // ========== PANTALLA 0: SPLASH SCREEN ==========
+    if (showSplash) {
+        SplashScreen()
+        return
+    }
 
     // ========== PANTALLA 1: LOGIN ==========
     if (currentUser == null) {
@@ -89,6 +105,7 @@ fun NexusApp() {
     var syncQrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var showSyncMenu by remember { mutableStateOf(false) }
 
+    // Mostrar tutorial automáticamente
     LaunchedEffect(currentBusiness) {
         if (currentBusiness != null) {
             val prefs = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE)
@@ -126,6 +143,7 @@ fun NexusApp() {
         showNotifications = false
     }
 
+    // Tutorial
     if (showOnboarding) {
         OnboardingTutorial(
             isAdmin = isAdmin,
@@ -153,12 +171,20 @@ fun NexusApp() {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showHelp = true }) { Icon(Icons.Filled.HelpOutline, "Ayuda") }
-                        IconButton(onClick = { showSyncMenu = true }) { Icon(Icons.Filled.Sync, "Sincronizar") }
+                        IconButton(onClick = { showHelp = true }) {
+                            Icon(Icons.Filled.HelpOutline, "Ayuda")
+                        }
 
-                        DropdownMenu(expanded = showSyncMenu, onDismissRequest = { showSyncMenu = false }) {
+                        IconButton(onClick = { showSyncMenu = true }) {
+                            Icon(Icons.Filled.Sync, "Sincronizar")
+                        }
+
+                        DropdownMenu(
+                            expanded = showSyncMenu,
+                            onDismissRequest = { showSyncMenu = false }
+                        ) {
                             DropdownMenuItem(
-                                text = { Text(if (isAdmin) "📤 Exportar datos" else "📤 Exportar mis ventas") },
+                                text = { Text(if (isAdmin) "📤 Exportar datos (para trabajador)" else "📤 Exportar mis ventas") },
                                 onClick = {
                                     showSyncMenu = false
                                     scope.launch {
@@ -166,10 +192,18 @@ fun NexusApp() {
                                             showSyncExportQr = false
                                             syncQrBitmap = null
                                             withContext(Dispatchers.IO) {
-                                                val data = syncManager.exportSalesToQr(currentUser!!.name, currentBusiness!!.code, isAdmin = isAdmin)
+                                                val data = syncManager.exportSalesToQr(
+                                                    currentUser!!.name,
+                                                    currentBusiness!!.code,
+                                                    isAdmin = isAdmin
+                                                )
                                                 if (data.isNotEmpty()) {
                                                     syncQrBitmap = QrCodeGenerator.generateQrCode(data)
                                                     withContext(Dispatchers.Main) { showSyncExportQr = true }
+                                                } else {
+                                                    withContext(Dispatchers.Main) {
+                                                        Toast.makeText(context, "⚠️ No hay datos para exportar", Toast.LENGTH_SHORT).show()
+                                                    }
                                                 }
                                             }
                                         } catch (e: Exception) {
@@ -180,8 +214,11 @@ fun NexusApp() {
                                 leadingIcon = { Icon(Icons.Filled.Upload, null) }
                             )
                             DropdownMenuItem(
-                                text = { Text(if (isAdmin) "📥 Importar datos" else "📥 Actualizar desde Admin") },
-                                onClick = { showSyncMenu = false; showSyncImportScanner = true },
+                                text = { Text(if (isAdmin) "📥 Importar datos (de trabajador)" else "📥 Actualizar desde Admin") },
+                                onClick = {
+                                    showSyncMenu = false
+                                    showSyncImportScanner = true
+                                },
                                 leadingIcon = { Icon(Icons.Filled.Download, null) }
                             )
                         }
@@ -231,7 +268,7 @@ fun NexusApp() {
                 onNotificationClick = { n ->
                     scope.launch {
                         try { db.notificationDao().update(n.copy(read = true)); showNotifications = false }
-                        catch (e: Exception) {}
+                        catch (e: Exception) { Log.e("NexusApp", "Error: ${e.message}", e) }
                     }
                 },
                 onMarkAsRead = { n -> scope.launch { try { db.notificationDao().update(n.copy(read = true)) } catch (_: Exception) {} } },
@@ -263,9 +300,11 @@ fun NexusApp() {
                             val result = syncManager.importSalesFromQr(data)
                             if (result.success) {
                                 showSyncImportScanner = false
-                                Toast.makeText(context, "✅ ${result.salesImported} ventas, ${result.productsUpdated} productos de ${result.workerName}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "✅ ${result.salesImported} ventas, ${result.productsUpdated} productos actualizados de ${result.workerName}", Toast.LENGTH_SHORT).show()
                             }
-                        } catch (e: Exception) {}
+                        } catch (e: Exception) {
+                            Log.e("NexusApp", "Error import: ${e.message}", e)
+                        }
                     }
                 },
                 onDismiss = { showSyncImportScanner = false }
