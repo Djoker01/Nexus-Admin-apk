@@ -17,8 +17,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nexus.admin.data.AppDatabase
 import com.nexus.admin.data.entity.User
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun LoginScreen(
@@ -27,16 +29,18 @@ fun LoginScreen(
     onFirstTimeSetup: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var pin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
     var showCreateAdminDialog by remember { mutableStateOf(false) }
     var showChangePin by remember { mutableStateOf(false) }
     var showRoleChoice by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
-    // CORREGIDO: Usar first() para obtener la lista sin bloquear
+    // Verificar si hay usuarios (SIN runBlocking)
     LaunchedEffect(Unit) {
         try {
-            val allUsers = runBlocking {
+            val allUsers = withContext(Dispatchers.IO) {
                 db.userDao().getAllUsers().first()
             }
             if (allUsers.isEmpty()) {
@@ -47,7 +51,7 @@ fun LoginScreen(
         }
     }
 
-    // Diálogo de elección de rol (primera vez)
+    // Diálogo de elección de rol
     if (showRoleChoice) {
         AlertDialog(
             onDismissRequest = {},
@@ -104,7 +108,8 @@ fun LoginScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = { Icon(Icons.Filled.Lock, null) },
-            isError = errorMessage.isNotEmpty()
+            isError = errorMessage.isNotEmpty(),
+            enabled = !isLoading
         )
 
         if (errorMessage.isNotEmpty()) {
@@ -115,26 +120,36 @@ fun LoginScreen(
 
         Button(
             onClick = {
-                if (pin.length != 4) return@Button
-                try {
-                    val user = runBlocking { db.userDao().getUserByPin(pin) }
-                    if (user != null) {
-                        onLoginSuccess(user)
-                    } else {
-                        errorMessage = "PIN incorrecto"
+                if (pin.length != 4 || isLoading) return@Button
+                isLoading = true
+                scope.launch {
+                    try {
+                        val user = withContext(Dispatchers.IO) {
+                            db.userDao().getUserByPin(pin)
+                        }
+                        if (user != null) {
+                            onLoginSuccess(user)
+                        } else {
+                            errorMessage = "PIN incorrecto"
+                            pin = ""
+                        }
+                    } catch (e: Exception) {
+                        errorMessage = "Error. Intente de nuevo."
                         pin = ""
                     }
-                } catch (e: Exception) {
-                    errorMessage = "Error. Intente de nuevo."
-                    pin = ""
+                    isLoading = false
                 }
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
-            enabled = pin.length == 4
+            enabled = pin.length == 4 && !isLoading
         ) {
-            Icon(Icons.Filled.Login, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Ingresar")
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+            } else {
+                Icon(Icons.Filled.Login, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Ingresar")
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -167,12 +182,16 @@ fun LoginScreen(
                         Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    try {
-                        runBlocking { db.userDao().insert(User(name = adminName, pin = adminPin, role = "admin")) }
-                        showCreateAdminDialog = false
-                        Toast.makeText(context, "✅ Admin creado. Ingresa con tu PIN", Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                db.userDao().insert(User(name = adminName, pin = adminPin, role = "admin"))
+                            }
+                            showCreateAdminDialog = false
+                            Toast.makeText(context, "✅ Admin creado. Ingresa con tu PIN", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
                     }
                 }) { Text("Crear Administrador") }
             },
@@ -198,17 +217,19 @@ fun LoginScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    try {
-                        val user = runBlocking { db.userDao().getUserByPin(currentPin) }
-                        if (user != null && newPin.length == 4 && newPin == confirmNewPin) {
-                            runBlocking { db.userDao().update(user.copy(pin = newPin)) }
-                            showChangePin = false
-                            Toast.makeText(context, "✅ PIN actualizado", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "❌ Datos incorrectos", Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        try {
+                            val user = withContext(Dispatchers.IO) { db.userDao().getUserByPin(currentPin) }
+                            if (user != null && newPin.length == 4 && newPin == confirmNewPin) {
+                                withContext(Dispatchers.IO) { db.userDao().update(user.copy(pin = newPin)) }
+                                showChangePin = false
+                                Toast.makeText(context, "✅ PIN actualizado", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "❌ Datos incorrectos", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }) { Text("Cambiar") }
             },
