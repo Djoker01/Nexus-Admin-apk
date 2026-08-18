@@ -29,11 +29,11 @@ fun LoginScreen(
     val context = LocalContext.current
     var pin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
-    var showCreateAdminDialog by remember { mutableStateOf(false) }
+    var showRegisterDialog by remember { mutableStateOf(false) }
+    var selectedRole by remember { mutableStateOf("") }
     var showChangePin by remember { mutableStateOf(false) }
     var showRoleChoice by remember { mutableStateOf(false) }
 
-    // Verificar si hay usuarios (usa first() para no bloquear)
     LaunchedEffect(Unit) {
         try {
             val allUsers = runBlocking { db.userDao().getAllUsers().first() }
@@ -45,7 +45,7 @@ fun LoginScreen(
         }
     }
 
-    // Diálogo de elección de rol (primera vez)
+    // Diálogo de elección de rol
     if (showRoleChoice) {
         AlertDialog(
             onDismissRequest = {},
@@ -56,7 +56,8 @@ fun LoginScreen(
                     Button(
                         onClick = {
                             showRoleChoice = false
-                            showCreateAdminDialog = true
+                            selectedRole = "admin"
+                            showRegisterDialog = true
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -78,6 +79,48 @@ fun LoginScreen(
                 }
             },
             confirmButton = {},
+            dismissButton = null
+        )
+    }
+
+    // Diálogo de registro unificado
+    if (showRegisterDialog) {
+        var userName by remember { mutableStateOf("") }
+        var userPin by remember { mutableStateOf("") }
+        var confirmPin by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(if (selectedRole == "admin") "Registro de Administrador" else "Registro de Trabajador") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Ingresa tus datos para crear tu cuenta:")
+                    OutlinedTextField(userName, { userName = it }, label = { Text("Tu nombre *") }, singleLine = true)
+                    HorizontalDivider()
+                    OutlinedTextField(userPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) userPin = it }, label = { Text("PIN (4 dígitos) *") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN *") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    if (confirmPin.isNotEmpty() && userPin != confirmPin) {
+                        Text("Los PIN no coinciden", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (userName.isBlank() || userPin.length != 4 || userPin != confirmPin) {
+                        Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    try {
+                        val user = User(name = userName.trim(), pin = userPin, role = selectedRole)
+                        runBlocking { db.userDao().insert(user) }
+                        showRegisterDialog = false
+                        // Entrar directamente sin volver a pedir login
+                        onLoginSuccess(user)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }) { Text("Crear Cuenta") }
+            },
             dismissButton = null
         )
     }
@@ -141,44 +184,7 @@ fun LoginScreen(
         TextButton(onClick = { showChangePin = true }) { Text("Cambiar mi PIN") }
     }
 
-    // Diálogo: Crear Admin
-    if (showCreateAdminDialog) {
-        var adminName by remember { mutableStateOf("") }
-        var adminPin by remember { mutableStateOf("") }
-        var confirmPin by remember { mutableStateOf("") }
-
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("Crear Administrador") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Crea tu cuenta de Administrador:")
-                    OutlinedTextField(adminName, { adminName = it }, label = { Text("Tu nombre *") }, singleLine = true)
-                    OutlinedTextField(adminPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) adminPin = it }, label = { Text("PIN (4 dígitos) *") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
-                    OutlinedTextField(confirmPin, { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it }, label = { Text("Confirmar PIN *") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
-                    if (confirmPin.isNotEmpty() && adminPin != confirmPin) Text("Los PIN no coinciden", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    if (adminName.isBlank() || adminPin.length != 4 || adminPin != confirmPin) {
-                        Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    try {
-                        runBlocking { db.userDao().insert(User(name = adminName, pin = adminPin, role = "admin")) }
-                        showCreateAdminDialog = false
-                        Toast.makeText(context, "✅ Admin creado. Ingresa con tu PIN", Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
-                }) { Text("Crear Administrador") }
-            },
-            dismissButton = null
-        )
-    }
-
-    // Diálogo: Cambiar PIN
+    // Cambiar PIN (igual que antes)
     if (showChangePin) {
         var currentPin by remember { mutableStateOf("") }
         var newPin by remember { mutableStateOf("") }
