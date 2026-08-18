@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -41,6 +42,7 @@ fun NexusApp() {
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
 
+    var showSplash by remember { mutableStateOf(true) }
     var currentUser by remember { mutableStateOf<User?>(null) }
     var currentBusiness by remember { mutableStateOf<Business?>(null) }
     var showBusinessSetup by remember { mutableStateOf(true) }
@@ -48,6 +50,19 @@ fun NexusApp() {
     var pendingWorker by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     var showOnboarding by remember { mutableStateOf(false) }
+
+    // ========== SPLASH SCREEN (2.5 segundos) ==========
+    LaunchedEffect(Unit) {
+        if (showSplash) {
+            kotlinx.coroutines.delay(2500)
+            showSplash = false
+        }
+    }
+
+    if (showSplash) {
+        SplashScreen()
+        return
+    }
 
     // ========== PANTALLA 1: LOGIN O UNIRSE COMO TRABAJADOR ==========
     if (currentUser == null) {
@@ -104,6 +119,7 @@ fun NexusApp() {
     var syncQrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var showSyncMenu by remember { mutableStateOf(false) }
 
+    // Mostrar tutorial superpuesto la primera vez
     LaunchedEffect(currentBusiness) {
         if (currentBusiness != null) {
             val prefs = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE)
@@ -141,14 +157,8 @@ fun NexusApp() {
         showNotifications = false
     }
 
-    if (showOnboarding) {
-        OnboardingTutorial(
-            isAdmin = isAdmin,
-            onFinish = { showOnboarding = false }
-        )
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
+        // Contenido principal
         Row(modifier = Modifier.fillMaxSize()) {
             Sidebar(
                 selectedItem = selectedScreen,
@@ -168,8 +178,13 @@ fun NexusApp() {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showHelp = true }) { Icon(Icons.Filled.HelpOutline, "Ayuda") }
-                        IconButton(onClick = { showSyncMenu = true }) { Icon(Icons.Filled.Sync, "Sincronizar") }
+                        IconButton(onClick = { showHelp = true }) {
+                            Icon(Icons.Filled.HelpOutline, "Ayuda")
+                        }
+
+                        IconButton(onClick = { showSyncMenu = true }) {
+                            Icon(Icons.Filled.Sync, "Sincronizar")
+                        }
 
                         DropdownMenu(expanded = showSyncMenu, onDismissRequest = { showSyncMenu = false }) {
                             DropdownMenuItem(
@@ -235,11 +250,30 @@ fun NexusApp() {
             }
         }
 
+        // ========== ONBOARDING SUPERPUESTO ==========
+        if (showOnboarding) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(10f),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                OnboardingTutorial(
+                    isAdmin = isAdmin,
+                    onFinish = { showOnboarding = false }
+                )
+            }
+        }
+
+        // ========== NOTIFICACIONES ==========
         AnimatedVisibility(
             visible = showNotifications,
             enter = fadeIn() + slideInVertically { -20 },
             exit = fadeOut() + slideOutVertically { -20 },
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 60.dp, end = 16.dp)
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 60.dp, end = 16.dp)
+                .zIndex(20f)
         ) {
             NotificationPanel(
                 notifications = notifications,
@@ -255,6 +289,7 @@ fun NexusApp() {
             )
         }
 
+        // ========== QR DE EXPORTACIÓN ==========
         if (showSyncExportQr && syncQrBitmap != null) {
             AlertDialog(
                 onDismissRequest = { showSyncExportQr = false },
@@ -270,6 +305,7 @@ fun NexusApp() {
             )
         }
 
+        // ========== ESCÁNER DE IMPORTACIÓN ==========
         if (showSyncImportScanner) {
             FloatingBarcodeScanner(
                 onBarcodeScanned = { data ->
@@ -287,6 +323,16 @@ fun NexusApp() {
             )
         }
 
-        if (showHelp) { HelpScreen(isAdmin = isAdmin, onDismiss = { showHelp = false }) }
+        // ========== AYUDA ==========
+        if (showHelp) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(30f),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                HelpScreen(isAdmin = isAdmin, onDismiss = { showHelp = false })
+            }
+        }
     }
 }
